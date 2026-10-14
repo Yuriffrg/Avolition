@@ -1,0 +1,22 @@
+<!-- Replace the export description, hero fields, category description and options
+     inside toolchain-export-panel with this fragment. Keep shared job actions/logs. -->
+<div class="workflow-tabs toolchain-tabs" role="tablist" aria-label="Toolchain export workflow">
+  <button id="toolchain-tab-animations" type="button" role="tab" class="workflow-tab" data-toolchain-workflow="heroes" aria-selected="true" aria-controls="toolchain-animations-panel">Animations</button>
+  <button id="toolchain-tab-maps" type="button" role="tab" class="workflow-tab" data-toolchain-workflow="maps" aria-selected="false" aria-controls="toolchain-maps-panel" tabindex="-1">Maps</button>
+</div>
+<div id="toolchain-animations-panel" role="tabpanel" aria-labelledby="toolchain-tab-animations">
+  <p class="toolchain-description">Export hero models and animations into your library, then open supported files in Animations.</p>
+  <div class="toolchain-export-fields">
+    <div class="toolchain-field"><label for="toolchain-category">Category</label><select id="toolchain-category" disabled><option value="">Loading supported workflows…</option></select></div>
+    <div class="toolchain-field"><label for="toolchain-hero">Hero</label><div class="toolchain-field-action"><select id="toolchain-hero" disabled><option value="">Load heroes from your installation</option></select><button id="toolchain-load-heroes" class="button secondary small" type="button">Load heroes</button></div></div>
+    <div id="toolchain-asset-field" class="toolchain-field"><label for="toolchain-asset">Asset</label><div class="toolchain-field-action"><select id="toolchain-asset" disabled><option value="">Choose a hero first</option></select><button id="toolchain-load-assets" class="button secondary small" type="button">Load assets</button></div></div>
+  </div>
+  <p id="toolchain-category-description" class="toolchain-description"></p>
+  <div id="toolchain-export-options" class="toolchain-export-options"></div>
+</div>
+<div id="toolchain-maps-panel" role="tabpanel" aria-labelledby="toolchain-tab-maps" hidden>
+  <p class="toolchain-description">Extract maps and their models, textures, lights and supported animation assets using DataTool.</p>
+  <div class="toolchain-field"><label for="toolchain-map">Map</label><div class="toolchain-field-action"><select id="toolchain-map" disabled><option value="">Load maps from your installation</option></select><button id="toolchain-load-maps" class="button secondary small" type="button">Load maps</button></div></div>
+  <p id="toolchain-map-description" class="toolchain-description">Load maps from your Overwatch installation, then choose a map or all maps.</p>
+  <div id="toolchain-map-options" class="toolchain-export-options"></div>
+</div>

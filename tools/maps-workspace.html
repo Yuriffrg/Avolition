@@ -1,0 +1,33 @@
+    <section id="workflow-maps" class="workflow-panel animation-workflow" role="tabpanel" aria-labelledby="tab-maps" hidden>
+      <section class="source-bar" aria-label="Map library source">
+        <div class="root-control"><label for="maps-root">Library source</label><div class="input-with-icon"><svg class="icon"><use href="#i-folder"/></svg><input id="maps-root" type="text" spellcheck="false" autocomplete="off" placeholder="Choose an exported map folder"></div></div>
+        <button id="maps-browse-root" class="button secondary" type="button">Browse…</button><button id="maps-scan" class="button primary" type="button">Scan folder ↗</button>
+        <p class="source-help">Finds .owmap files and keeps their exported model and texture folders together.</p>
+      </section>
+      <div class="workspace maps-workspace">
+        <aside class="library-panel"><div class="panel-heading"><h2>Map library</h2><span id="maps-count" class="count">0</span></div>
+          <div class="search-box"><svg class="icon"><use href="#i-search"/></svg><input id="maps-search" type="search" placeholder="Search maps" aria-label="Search maps"></div>
+          <div id="maps-list" class="clip-list" aria-label="Exported maps"></div><p id="maps-library-empty" class="maps-library-empty">Scan an exported folder to find .owmap files.</p>
+          <div class="library-footer">Select a map to preview</div>
+        </aside>
+        <section class="preview-panel" aria-label="Map preview">
+          <div class="viewport-wrap"><canvas id="maps-viewport" tabindex="0" aria-label="Interactive map preview. Hold 1 to pan, 2 to zoom, 3 to orbit."></canvas>
+            <div class="viewport-top"><div class="scene-label"><span class="scene-dot"></span><span id="maps-scene-name">No map loaded</span></div><div class="viewport-actions"><span id="maps-polygon-count" class="polygon-count glass" hidden>Polygons: 0</span><button id="maps-frame" class="icon-button glass" type="button" aria-label="Frame map" title="Frame map (F)"><svg class="icon"><use href="#i-fit"/></svg></button></div></div>
+            <div id="maps-empty" class="viewport-empty"><p id="maps-empty-message">Select an exported map from the library.<br>Extract maps from the Toolchain tab.</p></div>
+            <div id="maps-loading" class="viewport-loading" hidden><span class="spinner"></span><span id="maps-loading-label">Loading map…</span></div>
+            <div class="viewport-bottom"><span id="maps-mesh-stats">Static map preview</span><div class="navigation-hint"><span><kbd>1</kbd> Pan</span><span><kbd>2</kbd> Zoom</span><span><kbd>3</kbd> Orbit</span><span>+ drag</span></div></div>
+          </div>
+          <section class="map-export-panel" aria-label="Map export">
+            <div class="map-export-fields"><label for="maps-export-name">Export name</label><input id="maps-export-name" type="text" maxlength="160" placeholder="Map name" autocomplete="off"><button id="maps-export" class="button primary small" type="button" disabled>Export C4D</button>
+              <label for="maps-output">Output directory</label><input id="maps-output" type="text" spellcheck="false" autocomplete="off"><button id="maps-browse-output" class="button secondary small" type="button">Browse…</button></div>
+            <div class="map-export-options"><label><input id="maps-bake-textures" type="checkbox" checked> Bake textures</label><button id="maps-open-output" class="text-button" type="button">Open output folder</button><span id="maps-export-spinner" class="spinner" hidden></span></div>
+            <p id="maps-status" class="map-status" role="status" aria-live="polite">Ready. Scan your exported map library.</p>
+          </section>
+        </section>
+        <aside class="inspector-panel maps-inspector"><div class="panel-heading"><h2>Map details</h2></div><div class="clip-identity"><span id="maps-source-file" class="file-path">No map loaded</span></div>
+          <dl class="clip-metadata"><div><dt>Objects</dt><dd id="maps-detail-objects">—</dd></div><div><dt>Polygons</dt><dd id="maps-detail-polygons">—</dd></div></dl>
+          <section id="maps-objects-menu" class="objects-menu" aria-labelledby="maps-objects-title"><div class="objects-heading"><h3 id="maps-objects-title">Preview objects</h3></div><div class="objects-toolbar"><button id="maps-objects-show-all" type="button">Show all</button><button id="maps-objects-hide-all" type="button">Hide all</button><span id="maps-objects-summary" class="objects-summary" role="status">0 of 0 meshes shown</span></div><div id="maps-objects-list" class="objects-list" role="tree" aria-label="Map object hierarchy"></div><p class="objects-note">Double-click a name to rename it for export. Visibility affects the preview.</p></section>
+          <div class="view-settings"><h3>Viewport</h3><div class="view-toggles"><label><input id="maps-textures" type="checkbox" checked> Textures</label><label><input id="maps-grid" type="checkbox" checked> Grid</label><label><input id="maps-wireframe" type="checkbox"> Wireframe</label></div><p id="maps-material-status" class="view-note">Static geometry and common material maps.</p><details id="maps-notes-panel" class="map-notes" hidden><summary>Map notes</summary><pre id="maps-notes"></pre></details></div>
+        </aside>
+      </div>
+    </section>

@@ -1,0 +1,12 @@
+# OWLib map extraction contract
+
+Verified 2026-10-13 using official OWLib documentation, local `work/owlib/OWLib-develop` source, and the released DataTool runtime. Running the local runtime's `--help` reported **v2.24.1.0+1149+df522f0c** and listed both map modes and the shared extraction flags. This is verification provenance, not a pinned application version. No Overwatch installation is available here; a real map extraction remains unverified.
+
+- [Official README](https://github.com/overtools/OWLib#how-to-use): executable arguments are install directory, mode, then mode arguments. `list-maps` lists maps; `extract-maps` exports named maps or `*`.
+- [ListMaps](https://github.com/overtools/OWLib/blob/develop/DataTool/ToolLogic/List/ListMaps.cs) and [JSONTool](https://github.com/overtools/OWLib/blob/develop/DataTool/JSON/JSONTool.cs): `list-maps --json --out=<file>` writes a dictionary keyed by map-header GUID. Resource GUIDs and enums serialize as strings.
+- [MapHeader](https://github.com/overtools/OWLib/blob/develop/DataTool/DataModels/MapHeader.cs): preserve `GUID`, `MapGUID`, `VariantName`, `Name`, `MapType`, game modes, description and states. Its unique query combines the variant/name fallback and the map's low 32-bit index in uppercase hexadecimal. The header GUID is not the map index.
+- [ExtractMaps](https://github.com/overtools/OWLib/blob/develop/DataTool/ToolLogic/Extract/ExtractMaps.cs): matches map name, variant, unique name and map index. Avolition resolves a selected catalog ID to the unique query, with the numeric index as fallback for names DataTool cannot represent. It never inserts a hero/unlock filter into a map command.
+- [ExtractFlags](https://github.com/overtools/OWLib/blob/develop/DataTool/ToolLogic/Extract/ExtractFlags.cs): map extraction uses the shared texture, animation, sound and model-LOD switches. Hidden skip flags are verified in source. No invented per-map geometry/light switches are exposed.
+- [Map.Save](https://github.com/overtools/OWLib/blob/develop/DataTool/SaveLogic/Map.cs): writes `.owmap` variants and their dependent assets in DataTool's existing map hierarchy. Avolition preserves this structure.
+
+The UI retains independent hero/map catalogs and selection controls while both use the same process owner, cancellation, logs, validation and completion checks. Tests use official-shaped JSON fixtures and a harmless Python child process; they do not claim a game extraction or Cinema 4D import.

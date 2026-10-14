@@ -1,0 +1,5 @@
+The frozen CPython 3.12.13 backend includes OpenSSL 3.5.5 (27 Jan 2026).
+Copyright (c) 1998-2026 The OpenSSL Project Authors. All rights reserved.
+OpenSSL 3.5.5 is licensed under the Apache License 2.0.
+Its original license is preserved in OPENSSL-LICENSE.txt.
+Source: https://github.com/openssl/openssl/tree/openssl-3.5.5

@@ -1,0 +1,24 @@
+# Generated files and local environments
+__pycache__/
+*.py[cod]
+node_modules/
+.venv/
+venv/
+*.log
+.env
+.env.*
+!.env.example
+
+# Local assets, profiles and build output (never publish game exports)
+/library/
+/toolchain/
+/Map exports/
+/data/
+/.build/
+/build/
+/dist/
+/outputs/
+/preview-build/
+/.auth/
+*.exe
+*.zip
