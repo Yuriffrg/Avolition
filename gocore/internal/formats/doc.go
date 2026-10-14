@@ -63,7 +63,9 @@
 // package imports this one, it registers a MaterialResolverFactory with
 // RegisterMaterialResolver (or callers pass one in LoadOptions). Until then
 // LoadAsset uses NeutralMaterials: no materials, no textures, and the same
-// textureRoot rule. Material/MaterialMap/Texture are the shared descriptor
+// textureRoot rule. Package materials registers itself from init, so any
+// binary that should produce load_asset's real materials must import it
+// (a blank import is enough; mapformats imports it). Material/MaterialMap/Texture are the shared descriptor
 // types the materials package fills.
 //
 // # Errors

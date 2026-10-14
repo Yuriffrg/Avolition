@@ -29,3 +29,8 @@ func realpath(path string) string {
 		current = parent
 	}
 }
+
+// linkInfo is unused on Windows: ResolveCache memoizes whole resolutions only.
+type linkInfo struct{}
+
+func realpathCached(path string, _ *ResolveCache) string { return realpath(path) }
