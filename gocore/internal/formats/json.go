@@ -5,14 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"runtime"
 	"strconv"
+	"sync"
+	"sync/atomic"
 )
 
 // json.Marshal of an Asset or Clip is correct but spends most of its time
 // reflecting over millions of mesh/track numbers. AppendAssetJSON and
 // AppendClipJSON produce the same JSON object (same keys and values; only the
-// position of the bulk "meshes"/"bones" key differs, which JSON consumers
-// ignore) several times faster by encoding numeric arrays directly.
+// position of the bulk "meshes"/"bones"/"meshPrototypes" key differs, which
+// JSON consumers ignore) several times faster by encoding numeric arrays
+// directly. A compact map asset's mesh prototypes are encoded in parallel.
 
 var errNonFinite = errors.New("json: unsupported value: non-finite number")
 
@@ -166,15 +170,28 @@ func assetSize(asset *Asset) int {
 		if model == nil {
 			continue
 		}
-		size += 2048 + 400*len(model.Bones)
-		for _, mesh := range model.Meshes {
-			if mesh != nil {
-				size += 12*(len(mesh.Positions)+len(mesh.Normals)+len(mesh.UVs)+len(mesh.UVs2)) +
-					7*len(mesh.Indices) + 2*len(mesh.SkinIndices) + 12*len(mesh.SkinWeights)
+		size += 2048 + 400*len(model.Bones) + meshesSize(model.Meshes)
+	}
+	if asset.MeshPrototypes != nil {
+		asset.MeshPrototypes.Range(func(_ string, prototype *MeshPrototype) bool {
+			if prototype != nil {
+				size += meshesSize(prototype.Meshes)
 			}
-		}
+			return true
+		})
 	}
 	return size + 400*len(asset.ExportHierarchy)
+}
+
+func meshesSize(meshes []*Mesh) int {
+	size := 0
+	for _, mesh := range meshes {
+		if mesh != nil {
+			size += 12*(len(mesh.Positions)+len(mesh.Normals)+len(mesh.UVs)+len(mesh.UVs2)) +
+				7*len(mesh.Indices) + 2*len(mesh.SkinIndices) + 12*len(mesh.SkinWeights)
+		}
+	}
+	return size
 }
 
 // AppendAssetJSON appends the JSON encoding of asset to dst (see above).
@@ -187,6 +204,7 @@ func AppendAssetJSON(dst []byte, asset *Asset) ([]byte, error) {
 	}
 	shallow := *asset
 	shallow.Models = []*Model{}
+	shallow.MeshPrototypes = nil // omitempty: encoded separately below
 	encoded, err := json.Marshal(&shallow)
 	if err != nil {
 		return nil, err
@@ -209,7 +227,75 @@ func AppendAssetJSON(dst []byte, asset *Asset) ([]byte, error) {
 		}
 	}
 	dst = append(dst, ']')
-	return append(dst, encoded[at+len(marker):]...), nil
+	dst = append(dst, encoded[at+len(marker):]...)
+	if asset.MeshPrototypes == nil {
+		return dst, nil
+	}
+	// Compact map assets: append "meshPrototypes" before the closing brace.
+	// Prototypes hold nearly all of a map's numbers, so they are encoded in
+	// parallel into separate buffers and joined in order.
+	dst = append(dst[:len(dst)-1], `,"meshPrototypes":{`...)
+	ids := asset.MeshPrototypes.Keys()
+	parts := make([][]byte, len(ids))
+	errs := make([]error, len(ids))
+	encode := func(i int) {
+		prototype, _ := asset.MeshPrototypes.Get(ids[i])
+		parts[i], errs[i] = appendPrototype(nil, ids[i], prototype)
+	}
+	workers := min(runtime.NumCPU(), len(ids))
+	if workers <= 1 {
+		for i := range ids {
+			encode(i)
+		}
+	} else {
+		var next atomic.Int64
+		var wg sync.WaitGroup
+		for w := 0; w < workers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := int(next.Add(1) - 1); i < len(ids); i = int(next.Add(1) - 1) {
+					encode(i)
+				}
+			}()
+		}
+		wg.Wait()
+	}
+	for i, part := range parts {
+		if errs[i] != nil {
+			return nil, errs[i]
+		}
+		if i > 0 {
+			dst = append(dst, ',')
+		}
+		dst = append(dst, part...)
+	}
+	return append(dst, "}}"...), nil
+}
+
+// appendPrototype appends `"id":{"meshes":[...]}`.
+func appendPrototype(dst []byte, id string, prototype *MeshPrototype) ([]byte, error) {
+	if prototype != nil && cap(dst)-len(dst) < meshesSize(prototype.Meshes) {
+		dst = append(make([]byte, 0, len(dst)+len(id)+meshesSize(prototype.Meshes)+64), dst...)
+	}
+	dst, err := appendValue(dst, id)
+	if err != nil {
+		return nil, err
+	}
+	dst = append(dst, ':')
+	if prototype == nil || prototype.Meshes == nil {
+		return appendValue(dst, prototype)
+	}
+	dst = append(dst, `{"meshes":[`...)
+	for i, mesh := range prototype.Meshes {
+		if i > 0 {
+			dst = append(dst, ',')
+		}
+		if dst, err = appendMesh(dst, mesh); err != nil {
+			return nil, err
+		}
+	}
+	return append(dst, "]}"...), nil
 }
 
 // AppendClipJSON appends the JSON encoding of clip to dst.
