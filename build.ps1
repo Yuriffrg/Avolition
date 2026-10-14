@@ -5,7 +5,9 @@ param(
     [string]$DependencyPath = '',
     [string]$BuildRoot = '',
     [string]$ElectronArchive = '',
-    [switch]$CheckOnly
+    [switch]$CheckOnly,
+    # Put the Go core (gocore/) in front of the Python core. Requires Go on PATH.
+    [switch]$GoCore
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -45,6 +47,11 @@ print('64-bit Python and PyInstaller 6.22.3 ready')
 '@
     & $taskPython -c $taskCheck
     if ($LASTEXITCODE -ne 0) { throw 'Build dependency check failed.' }
+    if ($GoCore) {
+        $taskGo = (Get-Command 'go' -ErrorAction Stop).Source
+        & $taskGo version
+        if ($LASTEXITCODE -ne 0) { throw 'Go toolchain check failed.' }
+    }
     if ($CheckOnly) { return }
     $taskCore = [IO.Path]::GetFullPath((Join-Path $taskBuildRoot 'core\owio-core'))
     if (-not $taskCore.StartsWith($taskBuildRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
@@ -58,7 +65,22 @@ print('64-bit Python and PyInstaller 6.22.3 ready')
     $taskArguments += (Join-Path $taskSourceRoot 'app.py')
     & $taskPython @taskArguments
     if ($LASTEXITCODE -ne 0) { throw 'Avolition backend build failed.' }
-    & $taskPython (Join-Path $taskSourceRoot 'tools\package_desktop.py') --source $taskSourceRoot --build-root $taskBuildRoot --electron $taskElectronArchive
+    $taskPackageArguments = @((Join-Path $taskSourceRoot 'tools\package_desktop.py'), '--source', $taskSourceRoot,
+        '--build-root', $taskBuildRoot, '--electron', $taskElectronArchive)
+    if ($GoCore) {
+        $taskGoCore = Join-Path $taskBuildRoot 'gocore\owio-core.exe'
+        Push-Location (Join-Path $taskSourceRoot 'gocore')
+        try {
+            $env:GOOS = 'windows'; $env:GOARCH = 'amd64'; $env:CGO_ENABLED = '0'
+            & $taskGo build -trimpath -ldflags '-s -w' -o $taskGoCore ./cmd/owio-core
+            if ($LASTEXITCODE -ne 0) { throw 'Avolition Go core build failed.' }
+        } finally {
+            Pop-Location
+            Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
+        }
+        $taskPackageArguments += @('--go-core', $taskGoCore)
+    }
+    & $taskPython @taskPackageArguments
     if ($LASTEXITCODE -ne 0) { throw 'Avolition desktop packaging failed.' }
     Write-Host ('Portable app: ' + (Join-Path $taskBuildRoot 'dist\Avolition\Avolition.exe'))
     Write-Host 'Distribute the entire Avolition folder; keep its runtime files beside Avolition.exe.'

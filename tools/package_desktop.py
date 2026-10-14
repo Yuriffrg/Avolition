@@ -28,6 +28,7 @@ def main():
     parser.add_argument('--source', required=True, type=Path)
     parser.add_argument('--build-root', required=True, type=Path)
     parser.add_argument('--electron', required=True, type=Path)
+    parser.add_argument('--go-core', type=Path, help='Go owio-core.exe; the Python core moves behind it')
     args = parser.parse_args()
     source, build = args.source.resolve(), args.build_root.resolve()
     target = build / 'dist' / 'Avolition'
@@ -59,7 +60,14 @@ def main():
     for name in ('main.cjs', 'preload.cjs', 'package.json'):
         shutil.copy2(source/'desktop'/name, app/name)
     shutil.copytree(source/'web', target/'resources/web')
-    shutil.copytree(build/'core/owio-core', target/'resources/backend')
+    if args.go_core:
+        # The Go core answers the desktop host and forwards unported methods
+        # to the frozen Python core in backend/python-core (see gocore/README.md).
+        (target/'resources/backend').mkdir()
+        shutil.copy2(args.go_core, target/'resources/backend/owio-core.exe')
+        shutil.copytree(build/'core/owio-core', target/'resources/backend/python-core')
+    else:
+        shutil.copytree(build/'core/owio-core', target/'resources/backend')
     for name in ('README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'VALIDATION.md'):
         shutil.copy2(source/name, target/name)
     shutil.copytree(source/'owpreview', target/'owpreview', ignore=shutil.ignore_patterns('*.py', '__pycache__'))
