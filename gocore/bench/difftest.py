@@ -83,6 +83,9 @@ def diff(a, b, path='$', out=None):
         if sorted(a) != sorted(b):
             out.append(f'{path}: keys {list(a)[:12]} != {list(b)[:12]}')
         for key in a:
+            # Map export job ids are random UUIDs in both cores.
+            if key == 'id' and 'elapsedSeconds' in a:
+                continue
             if key in b and key not in IGNORED_KEYS:
                 if key == 'dataUri' and isinstance(a[key], str) and isinstance(b[key], str):
                     if png_pixels(a[key]) != png_pixels(b[key]):
@@ -211,6 +214,28 @@ def run_library(go_binary, library):
                     s.call('load_map', item['path'])
                     s.call('object_names', item['path'])
             s.call('open_map_output')
+            if maps['ok'] and maps['data']['maps']:
+                # Background map export (no Cinema 4D connected): the job fails
+                # identically on both cores; compare the final job snapshot.
+                first = maps['data']['maps'][0]['path']
+                s.call('export_map_start', first, 'Map export 日本語', None, '<DATA>/Map output', False, compare=False)
+                finals = []
+                for core in (s.python, s.go):
+                    deadline = time.monotonic() + 120
+                    while True:
+                        status = core.call('export_map_status')['result']['data']
+                        if not status['busy'] or time.monotonic() > deadline:
+                            break
+                        time.sleep(0.05)
+                    finals.append(normalize(dict(status, id=None), core.data_dir))
+                s.count += 1
+                problems = diff(finals[0], finals[1], '$mapExport')
+                if problems:
+                    s.failures += 1
+                    print('DIFF export_map_start', problems[:5])
+                s.call('export_map', first, 'Map sync', None, '<DATA>/Map output', False)
+                s.call('export_map', first, 'CON')
+                s.call('export_map_start', first, 'x', None, None, 'yes')
             s.call('export_map_status')
             s.call('export_map_status', 'nope')
             # Export list: valid entries need a skeleton model and a clip.
