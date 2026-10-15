@@ -43,6 +43,11 @@ type Request struct {
 	// Binary is "binary": true: the host accepts binary frames (see
 	// api/frames.go). app.py ignores the key.
 	Binary bool
+	// TextureFormats is "textureFormats": the GPU block formats the host's
+	// renderer accepts for load_texture ("bc7", "bc3", "bc1"), as a list of
+	// strings; unknown names and malformed values are ignored. Only binary
+	// replies carry compressed textures. app.py ignores the key.
+	TextureFormats []string
 }
 
 // Failure is a request rejected before dispatch. A nil ID is sent as null.
@@ -90,7 +95,11 @@ func Parse(line []byte) (Request, *Failure) {
 		}
 	}
 	binary := string(fields["binary"]) == "true"
-	return Request{ID: id, Method: method, Args: args, Binary: binary}, nil
+	var formats []string
+	if raw, present := fields["textureFormats"]; present && json.Unmarshal(raw, &formats) != nil {
+		formats = nil
+	}
+	return Request{ID: id, Method: method, Args: args, Binary: binary, TextureFormats: formats}, nil
 }
 
 // validID accepts a JSON string or an integer literal. Python's json module

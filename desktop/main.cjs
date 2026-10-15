@@ -24,6 +24,14 @@ const MAX_RESPONSE_BYTES = 256 * 1024 * 1024;
 // them ignore the request key and reply in JSON. AVOLITION_BINARY_ARRAYS=0
 // forces JSON replies, e.g. to compare both paths.
 const BINARY_ARRAYS = process.env.AVOLITION_BINARY_ARRAYS !== '0';
+// GPU block formats ("bc7", "bc3", "bc1") the renderer can sample, set once by
+// the renderer (window.pywebview.setTextureFormats). They go with every
+// binary load_texture request as "textureFormats", so the core may answer
+// with block-compressed mips instead of a PNG. Cores that do not know the key
+// ignore it. AVOLITION_COMPRESSED_TEXTURES=0 keeps PNG replies.
+const TEXTURE_FORMATS = new Set(['bc7', 'bc3', 'bc1']);
+const COMPRESSED_TEXTURES = BINARY_ARRAYS && process.env.AVOLITION_COMPRESSED_TEXTURES !== '0';
+let textureFormats = [];
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'";
 
 function optionsFromArgs(argv) {
@@ -146,7 +154,9 @@ class Backend {
     if (this.stopping || !this.child.stdin.writable) return Promise.reject(new Error('The local importer is closed.'));
     if (this.pending.size >= MAX_PENDING) return Promise.reject(new Error('Too many operations are pending. Wait for the current import to finish.'));
     const id = this.nextId++;
-    const request = JSON.stringify(BINARY_ARRAYS ? { id, method, args, binary: true } : { id, method, args }) + '\n';
+    const message = BINARY_ARRAYS ? { id, method, args, binary: true } : { id, method, args };
+    if (method === 'load_texture' && COMPRESSED_TEXTURES && textureFormats.length) message.textureFormats = textureFormats;
+    const request = JSON.stringify(message) + '\n';
     if (Buffer.byteLength(request) > MAX_REQUEST_BYTES) return Promise.reject(new Error('Request is too large.'));
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -227,6 +237,12 @@ function trustedSender(event) {
   if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) return false;
   try { const url = new URL(event.senderFrame.url); return url.protocol === 'whitehound:' && url.host === 'app'; }
   catch (_) { return false; }
+}
+
+function setTextureFormats(event, formats) {
+  if (!trustedSender(event) || !Array.isArray(formats)) return false;
+  textureFormats = [...new Set(formats.filter(format => TEXTURE_FORMATS.has(format)))];
+  return COMPRESSED_TEXTURES;
 }
 
 async function apiRequest(event, method, args) {
@@ -451,6 +467,7 @@ async function start() {
   if (!check.ok) throw new Error(check.error || 'The local importer could not initialize.');
   await installLocalProtocol(webRoot);
   ipcMain.handle('whitehound:api', apiRequest);
+  ipcMain.handle('whitehound:texture-formats', setTextureFormats);
   mainWindow = new BrowserWindow({
     title: 'Avolition', width: 1440, height: 940, minWidth: 1060, minHeight: 700,
     icon: path.join(webRoot, 'assets', 'avolition.ico'),

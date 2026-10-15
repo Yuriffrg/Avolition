@@ -79,6 +79,10 @@ func (t textureStore) Register(specs *ordered.Map[*formats.Texture], owner strin
 func (t textureStore) Release(owner string) error { return t.store.Release(owner) }
 
 func (t textureStore) Load(textureID, maxEdge any) (any, error) {
+	return t.LoadCompressed(textureID, maxEdge, "")
+}
+
+func (t textureStore) LoadCompressed(textureID, maxEdge any, formats string) (any, error) {
 	rawID, err := json.Marshal(textureID)
 	if err != nil {
 		return nil, err
@@ -87,7 +91,7 @@ func (t textureStore) Load(textureID, maxEdge any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	result, err := t.store.LoadJSON(rawID, rawEdge)
+	result, err := t.store.LoadJSONCompressed(rawID, rawEdge, formats)
 	if err != nil {
 		return nil, err
 	}

@@ -67,6 +67,63 @@ one. Measure with `bench/transport_stdio.cjs` (core and host parsing),
 bridge) and `bench/transport_renderer.cjs` (`--serve` in headless Chromium, to
 the first rendered frame).
 
+## Compressed textures
+
+A renderer whose WebGL context can sample GPU block formats gets preview
+textures as ready-to-upload mip chains instead of PNGs: the browser decodes
+nothing, uploads 4–8× fewer bytes and keeps 4–8× less video memory (no
+GPU-generated mips either). Negotiation, per host and only for binary
+replies, so every old/new host and core pairing keeps working:
+
+- The renderer (`web/materials.js`) checks its WebGL extensions:
+  `EXT_texture_compression_bptc` gives `bc7`; `WEBGL_compressed_texture_s3tc`
+  together with `WEBGL_compressed_texture_s3tc_srgb` gives `bc3` and `bc1`.
+  It calls `window.pywebview.setTextureFormats([...])` once (before its first
+  texture request) when that function exists. The `load_texture(texture_id,
+  max_edge)` signature does not change.
+- Electron: `desktop/preload.cjs` forwards the list over IPC
+  (`whitehound:texture-formats`); `desktop/main.cjs` keeps it and adds
+  `"textureFormats": [...]` to each binary `load_texture` request.
+  `AVOLITION_COMPRESSED_TEXTURES=0` (or `AVOLITION_BINARY_ARRAYS=0`) keeps
+  PNGs.
+- `--serve`: the injected bridge defines `setTextureFormats` and sends header
+  `X-Avolition-Texture-Formats: bc7,bc3,bc1` with binary `load_texture`
+  requests. The Python core's test server injects a bridge without the
+  function, so the renderer keeps asking for PNGs there.
+- The core honours the list only for binary replies (`"binary": true` /
+  `X-Avolition-Binary: 1`); JSON replies, and requests without the key, are
+  byte-identical to before. `app.py` ignores the unknown key.
+
+The core (`textures.Store.LoadCompressed`) picks BC7 when accepted, else BC1
+for previews whose alpha is all 255 and BC3 when alpha matters; with none of
+those, or a preview side that is not a multiple of 4, it answers with the
+usual PNG. The preview (same decode, channel processing and Lanczos resize as
+the PNG) is flipped bottom to top, because WebGL cannot flip compressed
+uploads (the renderer sets `flipY = false` on them, so UVs stay as before),
+then halved with a 2×2 box filter down to 1×1 like `generateMipmap` (in
+linear light for sRGB colour maps: `rgb`/`rgba` channels of `srgb` sources;
+the chain stops early at a level whose side is not 1, 2 or a multiple of 4).
+Each level is encoded by `internal/bcenc`, and results are cached per
+(id, max_edge, accepted formats) like the PNGs. The binary reply is
+
+```
+{"format":"bc7","mips":[{"width":2048,"height":2048,"data":{"$blob":0}},…,{"width":1,"height":1,"data":{"$blob":11}}],"width":2048,"height":2048[,"warning":…]}
+```
+
+with each level's blocks as a `Uint8Array` (blob type `u8`). The renderer
+builds a `THREE.CompressedTexture` with these mipmaps; the texture budget
+counts level-0 pixels as for PNGs.
+
+`internal/bcenc` is a fast encoder, not an optimal one: BC1 uses principal
+axis endpoints with two least-squares refinements (stb_dxt's approach); BC3
+adds an 8- or 6-value alpha block; BC7 uses mode 6 for every block, mode 5
+for blocks whose alpha varies and mode 1 (two subsets) for opaque blocks with
+an edge. Previews without alpha use `EncodeOpaque`, which lets BC7 decode
+alpha as 254 where that keeps black and white exact. Blocks are encoded in
+parallel rows. `go test ./internal/textures -run CompressedSpeed -v`
+(`AVOLITION_BENCH_LIBRARY` adds library textures) reports encode time and
+PSNR; `bench/texture_renderer.cjs` measures load-to-first-frame in Chromium.
+
 Every module is ported: `owio-core` never starts Python. `app.py` and
 `owpreview/` remain in the repository as the reference implementation used by
 the oracle tests (`internal/oracle`) and `bench/difftest.py`, which runs the
@@ -84,6 +141,7 @@ One package per Python module (`PORTING.md` has the table), plus shared helpers:
 | `api` | `BrowserAPI`: every API method, `catalog.json`, export list, stdio loop, binary frames, `--serve`, `--self-test` |
 | `formats`, `materials`, `mapformats` | model/entity/clip/material/map readers and fast JSON / binary encoders |
 | `textures`, `exporttextures` | image decoders (PNG, DDS BC1–7, TGA, TIFF, JPEG, BMP, WebP), Pillow-exact channel maths and Lanczos resize, PNG encoder, baking |
+| `bcenc` | BC1/BC3/BC7 block encoder and mip chains for compressed preview textures (Go only, no Python counterpart) |
 | `c4dexport`, `exportpose`, `fbx`, `exportbundle`, `mapexport`, `mapjobs`, `c4dbridge` | export payloads, pose maths, FBX writer, publishing, the Cinema 4D mailbox client |
 | `bonecounts`, `clipbindings`, `duplicates`, `libraryscan`, `objectnames`, `bonenames`, `evidence`, `analysis` | library scan helpers and animation analysis |
 | `datatool`, `toolchain`, `workflowpaths` | DataTool jobs (Windows job objects), Toolchain download/install, folders |
@@ -128,6 +186,8 @@ character with 2048² textures, and a 300-prop, 3,600-placement map. Set
 - `bench/transport_stdio.cjs`, `bench/transport_electron/main.cjs`,
   `bench/transport_renderer.cjs`: JSON versus binary frames through the host,
   Electron IPC and the renderer.
+- `bench/texture_renderer.cjs CORE LIBRARY [REPS]`: PNG versus compressed
+  preview textures, load to first rendered frame in headless Chromium.
 
 Results for 0.8.23 are in `../HANDOFF.md`.
 

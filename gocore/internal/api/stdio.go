@@ -12,6 +12,7 @@ import (
 	"avolition/gocore/internal/formats"
 	"avolition/gocore/internal/protocol"
 	"avolition/gocore/internal/pycompat"
+	"avolition/gocore/internal/textures"
 )
 
 // DecodeArgs decodes raw JSON arguments into Python-shaped values.
@@ -115,10 +116,12 @@ func (a *API) handleRequest(dst []byte, request protocol.Request) ([]byte, *form
 	if err != nil {
 		return AppendReply(dst, request.ID, nil, err), nil
 	}
-	data, err := a.Call(request.Method, args)
 	if !request.Binary {
+		data, err := a.Call(request.Method, args)
 		return AppendReply(dst, request.ID, data, err), nil
 	}
+	// Only binary replies may carry compressed textures.
+	data, err := a.call(request.Method, args, textures.CanonicalFormats(request.TextureFormats))
 	start := len(dst)
 	dst = append(dst, `{"id":`...)
 	dst = append(dst, request.ID...)

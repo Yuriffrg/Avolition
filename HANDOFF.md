@@ -147,6 +147,55 @@ The container's 4 cores are shared and barely scale; the Go core parallelises
 file reading, texture decoding/encoding and baking, so a desktop CPU with more
 cores should gain more than shown here.
 
+## Compressed preview textures
+
+Preview textures can now travel as GPU block-compressed mip chains (BC7, or
+BC1/BC3 without BPTC) instead of PNGs: no image decoding in the browser, no
+GPU mip generation, and 4–8× less upload and video memory. It is negotiated
+(renderer → `window.pywebview.setTextureFormats` → host adds
+`"textureFormats"` to binary `load_texture` requests), so the Python core,
+JSON replies and old hosts are unchanged: `difftest.py` still reports 0
+differences. Design, formats and reply shape: `gocore/README.md`
+"Compressed textures". Files: `gocore/internal/bcenc` (new encoder),
+`gocore/internal/textures/compressed.go`, `api` (`stdio.go`, `server.go`,
+`frames.go`, `dispatch.go`, `wire.go`), `protocol`, `desktop/main.cjs`,
+`desktop/preload.cjs`, `web/materials.js`, one line in `web/viewer.js`
+(passes the renderer to `MaterialLibrary`), tests
+`tests/test_compressed_textures.mjs`, `tests/test_compressed_texture_ui.cjs`,
+benchmark `gocore/bench/texture_renderer.cjs`.
+
+Measured with `gocore/bench/texture_renderer.cjs` (headless Chromium,
+SwiftShader, the shared 4-core container under load from other jobs, cold
+core caches, medians of 3):
+
+| Textures | Mode | Last reply | Textures built | Upload + finish | Total | Received | GPU memory |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Big character, 5 × 2048² | PNG | 1,043 ms | 1,057 ms | 942 ms | 1,999 ms | 22.9 MB | 111.8 MB |
+| Big character, 5 × 2048² | BC7 | 2,128 ms | 2,129 ms | 56 ms | 2,185 ms | 28.0 MB | 28.0 MB |
+| Bench map, 80 × 512² | PNG | 1,836 ms | 1,841 ms | 1,909 ms | 3,680 ms | 35.0 MB | 111.8 MB |
+| Bench map, 80 × 512² | BC7 | 2,695 ms | 2,696 ms | 41 ms | 2,737 ms | 28.0 MB | 28.0 MB |
+
+The browser side (decode, upload, mip generation) drops from ~1–2 s to
+~50 ms and video memory 4×; the core spends that time encoding instead
+(BC7 costs ~1.2–1.9× a PNG encode per 2048² texture, ~0.25–0.4 s on this
+loaded machine) until its cache holds the result. The synthetic library's
+textures are smooth and compress well as PNG, so compressed replies carry
+more bytes here; real textures are usually the other way round. On a real
+GPU the upload saving is smaller than SwiftShader's, the decode saving the
+same.
+
+Intentional differences from the PNG path: compressed previews are lossy
+(see the PSNR numbers in the README section); mips are box-filtered by the
+core (in linear light for sRGB colour maps, as GPUs do); BC7 may decode the
+alpha of opaque previews as 254 so that black and white stay exact.
+
+Checked in Chromium with SwiftShader, which exposes BPTC and S3TC:
+`tests/test_compressed_texture_ui.cjs` renders every fixture map through the
+PNG and the BC7 and BC1 paths and compares them at full size and minified
+(orientation, colour space, mips). Not checked on a real GPU/ANGLE-D3D11:
+upload speed, driver acceptance of non-power-of-two compressed sizes, and
+visual quality on real Overwatch textures.
+
 ## Not verified here (needs a Windows machine)
 
 Everything was built and run on Linux; the Windows build compiles but was not

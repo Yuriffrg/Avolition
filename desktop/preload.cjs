@@ -14,7 +14,10 @@ const api = {};
 for (const method of methods) {
   api[method] = (...args) => ipcRenderer.invoke('whitehound:api', method, args);
 }
-contextBridge.exposeInMainWorld('pywebview', { api: Object.freeze(api) });
+// The GPU block formats the renderer can sample; the host adds them to later
+// load_texture requests (see main.cjs).
+const setTextureFormats = formats => ipcRenderer.invoke('whitehound:texture-formats', formats);
+contextBridge.exposeInMainWorld('pywebview', { api: Object.freeze(api), setTextureFormats });
 window.addEventListener('DOMContentLoaded', () => {
   window.dispatchEvent(new Event('pywebviewready'));
 }, { once: true });

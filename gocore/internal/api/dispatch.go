@@ -228,7 +228,11 @@ var debugPanics = false
 
 // Call runs one API method like getattr(api, method)(*args) through reply():
 // it returns the data, or the error whose errorText is the reply's error.
-func (a *API) Call(name string, args []any) (any, error) {
+func (a *API) Call(name string, args []any) (any, error) { return a.call(name, args, "") }
+
+// call is Call; textureFormats (canonical, see textures.CanonicalFormats) are
+// the GPU block formats a binary reply to load_texture may use.
+func (a *API) call(name string, args []any, textureFormats string) (any, error) {
 	spec := methods[name]
 	if spec == nil {
 		return nil, newValueError("Unknown API method")
@@ -243,6 +247,9 @@ func (a *API) Call(name string, args []any) (any, error) {
 	copy(full, args)
 	for i := len(args); i < len(spec.params); i++ {
 		full[i] = spec.defaults[i-spec.required]
+	}
+	if name == "load_texture" && textureFormats != "" {
+		return protect(func() (any, error) { return a.textures.LoadCompressed(full[0], full[1], textureFormats) })
 	}
 	return protect(func() (any, error) { return spec.call(a, full) })
 }

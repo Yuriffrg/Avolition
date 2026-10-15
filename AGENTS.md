@@ -31,6 +31,15 @@ c4d-plugin/ + owpreview/c4d_bridge.py, c4d_scene.py, c4d_octane.py
   turns them into typed arrays (`desktop/frames.cjs`). Every other reply is a
   plain JSON line. The Python core ignores `binary` and answers in JSON, and
   the renderer accepts both arrays and typed arrays.
+- **Compressed textures:** the renderer tells the host once which GPU block
+  formats it can sample (`window.pywebview.setTextureFormats(["bc7","bc3","bc1"])`,
+  only when that function exists); the host adds `"textureFormats"` to binary
+  `load_texture` requests (`--serve`: header `X-Avolition-Texture-Formats`),
+  and the Go core may then answer with `{"format","mips":[{width,height,data}]}`
+  (rows bottom to top, upload with `flipY = false`) instead of `png`. JSON
+  replies never change; the Python core ignores the key. Any code that
+  consumes `load_texture` replies must go through `MaterialLibrary` (or
+  handle both shapes). Details: `gocore/README.md` "Compressed textures".
 - **Ordering:** requests are handled in arrival order, except that consecutive
   `load_texture` calls run in parallel (`concurrent` in
   `gocore/internal/api/stdio.go`); any other request waits for them first.
