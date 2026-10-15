@@ -111,7 +111,7 @@ func init() {
 			func(a *API, x []any) (any, error) { return a.ExportMap(x[0], x[1], x[2], x[3], x[4], false) }),
 		"export_map_start": m("path,name,root,output,bake_textures", 2, []any{nil, nil, true}, "exportMap,bridge,objectNames",
 			func(a *API, x []any) (any, error) { return a.ExportMap(x[0], x[1], x[2], x[3], x[4], true) }),
-		"export_map_status": m("job_id", 0, []any{nil}, "", func(a *API, x []any) (any, error) { return a.mapExports.Snapshot(x[0]) }),
+		"export_map_status": m("job_id", 0, []any{nil}, "", func(a *API, x []any) (any, error) { return a.mapExports.Snapshot(jobID(x[0])) }),
 		"browse_map": m("", 0, nil, "", func(*API, []any) (any, error) {
 			return nil, &runtimeError{"Map file dialogs are provided by the Avolition desktop window."}
 		}),

@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+
+	"avolition/gocore/internal/c4dbridge"
+	"avolition/gocore/internal/mapexport"
 )
 
 var mockC4DBytes = []byte("MOCK C4D SCENE: API transaction fixture, not a native Cinema 4D file.")
@@ -113,4 +116,26 @@ func requireBake(t testing.TB, a *API) {
 	if a.deps.BakeMaterials == nil {
 		t.Skip("waiting for exporttextures (bake_materials)")
 	}
+}
+
+// MapBridge adapts the mock to map_export's bridge contract.
+func (b *mockBridge) MapBridge() mapexport.Bridge { return mockMapBridge{b} }
+
+type mockMapBridge struct{ b *mockBridge }
+
+func (m mockMapBridge) Status() *c4dbridge.Status {
+	encoded, _ := json.Marshal(m.b.Status())
+	status := c4dbridge.NewStatus(nil)
+	if err := status.UnmarshalJSON(encoded); err != nil {
+		panic(err)
+	}
+	return status
+}
+
+func (m mockMapBridge) Export(payload any, destination, textureFolder string, _ c4dbridge.ExportOptions) (json.RawMessage, error) {
+	warnings, err := m.b.Export(payload, destination, textureFolder)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(map[string]any{"warnings": warnings})
 }

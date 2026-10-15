@@ -234,8 +234,3 @@ func TestStaleMapNamesAreIgnoredWithoutDiscardingSavedNames(t *testing.T) {
 	assertJSON(t, ok(t, call(t, newAPI(t, Options{DataDir: f.profile}), "object_names", mapPath)), stored)
 	requireMapExport(t, f.api)
 }
-
-func TestMapExportFailuresPreserveExistingExports(t *testing.T) {
-	f := newQueueFixture(t)
-	requireMapExport(t, f.api)
-}

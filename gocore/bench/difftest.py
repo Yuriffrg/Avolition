@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Differential test: identical request sequences through the Python core
-(app.py --stdio) and the Go core (owio-core --stdio, AVOLITION_GO_API=1),
+(app.py --stdio) and the Go core (owio-core --stdio),
 comparing every reply and the final catalog.json of each core's own fresh
 profile.
 
@@ -111,7 +111,7 @@ class Session:
         app_dir = workspace / 'App'
         app_dir.mkdir()
         self.python = Core('Python', [sys.executable, str(REPO / 'app.py')], workspace / 'py-profile', app_dir)
-        self.go = Core('Go', [go_binary], workspace / 'go-profile', app_dir, {'AVOLITION_GO_API': '1'})
+        self.go = Core('Go', [go_binary], workspace / 'go-profile', app_dir)
         self.count = self.failures = 0
         self.by_method = {}
 

@@ -9,7 +9,10 @@ import (
 	"avolition/gocore/internal/clipbindings"
 	"avolition/gocore/internal/datatool"
 	"avolition/gocore/internal/duplicates"
+	"avolition/gocore/internal/exportbundle"
+	"avolition/gocore/internal/exporttextures"
 	"avolition/gocore/internal/formats"
+	"avolition/gocore/internal/mapexport"
 	"avolition/gocore/internal/mapformats"
 	_ "avolition/gocore/internal/materials" // load_asset's real materials
 	"avolition/gocore/internal/objectnames"
@@ -37,7 +40,17 @@ func Default() Deps {
 		NewClipBindings: func() ClipBindings { return clipBindings{clipbindings.NewDefault()} },
 		NewBridge:       func(root string) Bridge { return &bridgeClient{c4dbridge.NewClient(root)} },
 		NewAnalysis:     newAnalysis,
-		ObjectNames:     objectNames{},
+		BakeMaterials: func(asset *formats.Asset, folder string) (Materials, []string, error) {
+			result, err := exporttextures.BakeMaterials(asset, folder, "", nil)
+			if err != nil {
+				return nil, nil, err
+			}
+			return result.Materials, result.Warnings, nil
+		},
+		ExportMap: func(asset *formats.Asset, folder, name string, options mapexport.Options) (*exportbundle.Result, error) {
+			return mapexport.ExportMap(asset, folder, &name, options)
+		},
+		ObjectNames: objectNames{},
 		NewToolchain: func(root string, activity toolchain.ActivityLock) Toolchain {
 			return toolchain.NewManager(root, toolchain.Options{ActivityLock: activity})
 		},
@@ -111,6 +124,9 @@ type bridgeClient struct{ client *c4dbridge.Client }
 func (b *bridgeClient) Root() string              { return b.client.Root }
 func (b *bridgeClient) Status() BridgeStatus      { return b.client.Status() }
 func (b *bridgeClient) Client() *c4dbridge.Client { return b.client }
+
+// MapBridge is the client itself (*c4dbridge.Client satisfies mapexport.Bridge).
+func (b *bridgeClient) MapBridge() mapexport.Bridge { return b.client }
 
 func (b *bridgeClient) Export(payload any, destination, textureFolder string) ([]string, error) {
 	raw, err := b.client.Export(payload, destination, textureFolder, c4dbridge.ExportOptions{})

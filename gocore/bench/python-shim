@@ -6,6 +6,6 @@ here=$(cd "$(dirname "$0")" && pwd)
 case "$1" in
   */app.py|app.py)
     shift
-    AVOLITION_WEB_ROOT="${AVOLITION_WEB_ROOT:-$here/../../web}" AVOLITION_GO_API=1 exec "${OWIO_CORE_BIN:-$here/../bin/owio-core}" "$@" ;;
+    AVOLITION_WEB_ROOT="${AVOLITION_WEB_ROOT:-$here/../../web}" exec "${OWIO_CORE_BIN:-$here/../bin/owio-core}" "$@" ;;
 esac
 exec python3 "$@"

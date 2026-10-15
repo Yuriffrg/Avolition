@@ -32,7 +32,7 @@ func buildCore(t *testing.T) (binary, repo string) {
 func TestDeveloperServer(t *testing.T) {
 	binary, repo := buildCore(t)
 	cmd := exec.Command(binary, "--serve", "--port", "0", "--data-dir", filepath.Join(t.TempDir(), "profile"))
-	cmd.Env = append(os.Environ(), "AVOLITION_GO_API=1", "AVOLITION_WEB_ROOT="+filepath.Join(repo, "web"))
+	cmd.Env = append(os.Environ(), "AVOLITION_WEB_ROOT="+filepath.Join(repo, "web"))
 	stdout, _ := cmd.StdoutPipe()
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func TestSelfTestReport(t *testing.T) {
 	report := filepath.Join(t.TempDir(), "report.json")
 	cmd := exec.Command(binary, "--self-test", report, "--root", filepath.Join(repo, "tests", "demo-assets"),
 		"--data-dir", filepath.Join(t.TempDir(), "profile"))
-	cmd.Env = append(os.Environ(), "AVOLITION_GO_API=1")
+	cmd.Env = os.Environ()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}

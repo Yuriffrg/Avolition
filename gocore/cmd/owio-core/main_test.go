@@ -10,29 +10,10 @@ import (
 	"testing"
 )
 
-// End-to-end: the built Go core in front of the real app.py, replaying the
-// desktop scenarios from tests/test_stdio.py against tests/demo-assets.
-func TestAgainstRealPythonCore(t *testing.T) {
-	repo, err := filepath.Abs(filepath.Join("..", "..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	script := filepath.Join(repo, "app.py")
-	if _, err := os.Stat(script); err != nil {
-		t.Skip("app.py is not available")
-	}
-	interpreter := "python3"
-	if value := os.Getenv("AVOLITION_PYTHON"); value != "" {
-		interpreter = value
-	}
-	if exec.Command(interpreter, "-c", "import numpy, PIL").Run() != nil {
-		t.Skip("python3 with numpy and Pillow is not available")
-	}
-	binary := filepath.Join(t.TempDir(), "owio-core")
-	if out, err := exec.Command("go", "build", "-o", binary, ".").CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, out)
-	}
-
+// End-to-end: the built core replaying the desktop scenarios of
+// tests/test_stdio.py against tests/demo-assets over the real stdio pipe.
+func TestStdioEndToEnd(t *testing.T) {
+	binary, repo := buildCore(t)
 	demo := filepath.Join(repo, "tests", "demo-assets")
 	entity := filepath.Join(demo, "Entities", "PreviewRobot", "PreviewRobot.owentity")
 	clip := filepath.Join(demo, "Animations", "001_Wave.owanimclip")
@@ -55,20 +36,10 @@ func TestAgainstRealPythonCore(t *testing.T) {
 	}
 	input.WriteString("{bad json\n")
 
-	for _, mode := range []string{"hybrid", "go"} {
-		t.Run(mode, func(t *testing.T) { runScenario(t, binary, repo, script, interpreter, input.String(), requests, mode) })
-	}
-}
-
-func runScenario(t *testing.T, binary, repo, script, interpreter, input string, requests []map[string]any, mode string) {
 	cmd := exec.Command(binary, "--stdio", "--data-dir", filepath.Join(t.TempDir(), "state"), "--app-dir", repo)
-	cmd.Env = append(os.Environ(), "AVOLITION_PYTHON_CORE="+script, "AVOLITION_PYTHON="+interpreter)
-	if mode == "go" {
-		cmd.Env = append(cmd.Env, "AVOLITION_GO_API=1", "AVOLITION_PYTHON_CORE=/nonexistent/app.py")
-	} else {
-		cmd.Env = append(cmd.Env, "AVOLITION_GO_API=")
-	}
-	cmd.Stdin = strings.NewReader(input)
+	// No Python is involved: an unusable interpreter must not matter.
+	cmd.Env = append(os.Environ(), "AVOLITION_PYTHON_CORE=/nonexistent/app.py", "PATH=/nonexistent")
+	cmd.Stdin = strings.NewReader(input.String())
 	stdout, _ := cmd.StdoutPipe()
 	var stderr strings.Builder
 	cmd.Stderr = &stderr

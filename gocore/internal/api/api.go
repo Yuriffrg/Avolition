@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"avolition/gocore/internal/formats"
+	"avolition/gocore/internal/mapjobs"
 	"avolition/gocore/internal/ordered"
 	"avolition/gocore/internal/pycompat"
 	"avolition/gocore/internal/workflowpaths"
@@ -67,7 +68,7 @@ type API struct {
 	previewMu         sync.Mutex // _entity_preview_lock
 	previewGeneration int
 
-	mapExports   MapJobs
+	mapExports   *mapjobs.Jobs
 	textures     TextureStore
 	duplicates   DuplicateIndex
 	clipBindings ClipBindings
@@ -137,11 +138,7 @@ func New(options Options) (*API, error) {
 		deps: deps, desktopMode: options.DesktopMode, lastPing: time.Now(),
 		queueRunning: map[string]bool{}, naming: ordered.New[*formats.Asset](),
 	}
-	if deps.NewMapJobs != nil {
-		a.mapExports = deps.NewMapJobs()
-	} else {
-		a.mapExports = newMapJobs()
-	}
+	a.mapExports = mapjobs.New()
 	if deps.NewTextures != nil {
 		a.textures = deps.NewTextures()
 	}

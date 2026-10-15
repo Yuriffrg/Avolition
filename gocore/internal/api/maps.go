@@ -6,6 +6,8 @@ import (
 	"strconv"
 
 	"avolition/gocore/internal/formats"
+	"avolition/gocore/internal/mapexport"
+	"avolition/gocore/internal/mapjobs"
 	"avolition/gocore/internal/ordered"
 	"avolition/gocore/internal/pycompat"
 	"avolition/gocore/internal/pypath"
@@ -268,7 +270,7 @@ func (a *API) mapExportRequest(path, name, root, output, bakeTextures any) (*map
 		root: rootFolder, folder: folder, folderExisted: pycompat.Exists(folder), bakeTextures: bake}, nil
 }
 
-func (a *API) runMapExport(request *mapExportRequest, progress Progress) (any, error) {
+func (a *API) runMapExport(request *mapExportRequest, progress mapjobs.Progress) (any, error) {
 	progress("Loading map…", nil, nil)
 	asset, err := a.deps.LoadMap(request.path, request.root)
 	if err != nil {
@@ -281,24 +283,15 @@ func (a *API) runMapExport(request *mapExportRequest, progress Progress) (any, e
 	if asset, err = a.deps.ObjectNames.Apply(asset, filterNames(request.names, known)); err != nil {
 		return nil, err
 	}
-	result, err := a.deps.ExportMap(asset, request.folder, request.name, request.bakeTextures, a.bridge, progress)
+	result, err := a.deps.ExportMap(asset, request.folder, request.name, mapexport.Options{
+		BakeTextures: request.bakeTextures, Bridge: a.bridge.MapBridge(), Progress: mapexport.Progress(progress)})
 	if err != nil {
 		return nil, err
 	}
 	progress("Recording exported map…", nil, nil)
-	var files []string
-	if list, ok := get(result, "files").([]any); ok {
-		for _, item := range list {
-			if text, ok := item.(string); ok {
-				files = append(files, text)
-			}
-		}
-	} else if list, ok := get(result, "files").([]string); ok {
-		files = list
-	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if err := a.recordExportLocked(request.folder, request.folderExisted, files); err != nil {
+	if err := a.recordExportLocked(request.folder, request.folderExisted, result.Files); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -310,7 +303,7 @@ func (a *API) ExportMap(path, name, root, output, bakeTextures any, background b
 	if err != nil {
 		return nil, err
 	}
-	operation := func(progress Progress) (any, error) { return a.runMapExport(request, progress) }
+	operation := func(progress mapjobs.Progress) (any, error) { return a.runMapExport(request, progress) }
 	if background {
 		return a.mapExports.Start(operation)
 	}
@@ -319,3 +312,16 @@ func (a *API) ExportMap(path, name, root, output, bakeTextures any, background b
 
 var _ = formats.LoadAsset
 var _ = strconv.Itoa
+
+// jobID adapts export_map_status's job_id: None, or a string that must name
+// the current job (any other value never does).
+func jobID(value any) *string {
+	if value == nil {
+		return nil
+	}
+	if text, ok := value.(string); ok {
+		return &text
+	}
+	never := "\x00not a job id"
+	return &never
+}

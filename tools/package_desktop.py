@@ -28,7 +28,7 @@ def main():
     parser.add_argument('--source', required=True, type=Path)
     parser.add_argument('--build-root', required=True, type=Path)
     parser.add_argument('--electron', required=True, type=Path)
-    parser.add_argument('--go-core', type=Path, help='Go owio-core.exe; the Python core moves behind it')
+    parser.add_argument('--go-core', type=Path, help='Go owio-core.exe: the complete backend (no frozen Python core)')
     args = parser.parse_args()
     source, build = args.source.resolve(), args.build_root.resolve()
     target = build / 'dist' / 'Avolition'
@@ -61,11 +61,9 @@ def main():
         shutil.copy2(source/'desktop'/name, app/name)
     shutil.copytree(source/'web', target/'resources/web')
     if args.go_core:
-        # The Go core answers the desktop host and forwards unported methods
-        # to the frozen Python core in backend/python-core (see gocore/README.md).
+        # The Go core is the whole backend (gocore/README.md): no Python runtime ships.
         (target/'resources/backend').mkdir()
         shutil.copy2(args.go_core, target/'resources/backend/owio-core.exe')
-        shutil.copytree(build/'core/owio-core', target/'resources/backend/python-core')
     else:
         shutil.copytree(build/'core/owio-core', target/'resources/backend')
     for name in ('README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'VALIDATION.md'):
@@ -80,11 +78,13 @@ def main():
     licenses = target/'LICENSES'
     licenses.mkdir()
     shutil.copytree(source/'licenses', licenses, dirs_exist_ok=True)
-    for candidate in (Path(sys.base_prefix)/'LICENSE.txt', Path(sys.base_prefix)/'LICENSE'):
+    # A Go-core build ships no Python runtime or Python packages.
+    bundled = () if args.go_core else ('pyinstaller', 'pyinstaller-hooks-contrib', 'pillow', 'numpy', 'charset-normalizer')
+    for candidate in () if args.go_core else (Path(sys.base_prefix)/'LICENSE.txt', Path(sys.base_prefix)/'LICENSE'):
         if candidate.is_file():
             shutil.copy2(candidate, licenses/'PYTHON-LICENSE.txt')
             break
-    for name in ('pyinstaller', 'pyinstaller-hooks-contrib', 'pillow', 'numpy', 'charset-normalizer'):
+    for name in bundled:
         try:
             dist = metadata.distribution(name)
         except metadata.PackageNotFoundError:
@@ -121,7 +121,8 @@ def main():
         'Double-click scene, model or mesh names in Preview objects to rename them for future exports. Source files and joint names stay unchanged.\n'
         'Example assets contains a small synthetic rig for trying the controls.\n', encoding='utf-8')
     (target/'BUILD.json').write_text(json.dumps({'app': 'Avolition', 'version': '0.8.22',
-        'electron': version, 'electronSHA256': actual, 'python': sys.version}, indent=2), encoding='utf-8')
+        'electron': version, 'electronSHA256': actual,
+        **({'backend': 'go'} if args.go_core else {'python': sys.version})}, indent=2), encoding='utf-8')
     stamp_windows_branding(target, source)
     print(target)
 

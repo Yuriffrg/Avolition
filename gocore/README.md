@@ -26,37 +26,19 @@ Go owio-core ── internal/api (BrowserAPI) ── formats, materials, texture
 - Mesh and clip replies are encoded with `formats.AppendAssetJSON` /
   `AppendClipJSON` straight into the output buffer.
 
-### Migration phase (until every module is ported)
-
-`api.Missing(api.Default())` lists modules that are not ported yet. While it is
-not empty, `owio-core` keeps the Python core as the owner of all state and
-answers only `api.Stateless` methods in Go (ping, dialogs, `load_animation`,
-`read_clip_bindings`, `c4d_status`); everything else is forwarded to Python.
-Splitting stateful methods between two processes would let them overwrite each
-other's `catalog.json` and lose loaded-asset/texture registrations.
-
-`AVOLITION_GO_API=1` forces the Go API for every mode (methods whose modules
-are missing return an error). `bench/python-shim` uses it so the renderer
-tests can run against the Go core, and `bench/difftest.py` compares the two
-cores reply by reply.
-
-When `api.Missing` is empty the Python core is no longer started at all.
-
-The Python core (hybrid phase only) is found in this order:
-
-1. `AVOLITION_PYTHON_CORE`: a frozen executable or a `.py` file.
-2. `python-core/owio-core(.exe)` beside the Go binary (the packaged layout).
-3. `app.py` in the binary's folder or up to three parent folders (a source
-   checkout).
-
-A `.py` core runs with `AVOLITION_PYTHON` (default `python` on Windows,
-`python3` elsewhere). On Windows it runs hidden, in a kill-on-close job object.
+Every module is ported: `owio-core` never starts Python. `app.py` and
+`owpreview/` remain in the repository as the reference implementation used by
+the oracle tests (`internal/oracle`) and `bench/difftest.py`, which runs the
+same request sequences through both cores and compares every reply and the
+final `catalog.json`. `bench/python-shim` lets the renderer tests
+(`tests/*_ui.cjs`, which start `<python> app.py --serve`) run against the Go
+core.
 
 ## Develop
 
 ```sh
 cd gocore
-go test ./...                       # includes an end-to-end run against app.py + tests/demo-assets
+go test ./...                       # includes end-to-end stdio/--serve/--self-test runs of the binary
 go build -o bin/owio-core ./cmd/owio-core
 python3 bench/difftest.py bin/owio-core     # Python vs Go, every reply and catalog.json
 # Renderer tests against the Go core (--serve):
@@ -87,9 +69,9 @@ cd ..\desktop; npm start
 .\build.ps1 -ElectronArchive ...\electron-v44.4.3-win32-x64.zip -GoCore
 ```
 
-This places the Go core at `resources/backend/owio-core.exe` and the frozen
-Python core at `resources/backend/python-core/`. Without `-GoCore`, the build
-is unchanged.
+This places the Go core at `resources/backend/owio-core.exe`; no frozen Python
+core is built or shipped (Python is used only by the packaging script).
+Without `-GoCore`, the build is unchanged.
 
 ## Phase 1 measurements
 

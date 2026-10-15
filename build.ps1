@@ -6,7 +6,9 @@ param(
     [string]$BuildRoot = '',
     [string]$ElectronArchive = '',
     [switch]$CheckOnly,
-    # Put the Go core (gocore/) in front of the Python core. Requires Go on PATH.
+    # Use the Go core (gocore/) as the complete backend instead of the
+    # PyInstaller-frozen app.py. Requires Go on PATH; Python is then used only
+    # by the packaging script (and PyInstaller's icon/version-resource helper).
     [switch]$GoCore
 )
 Set-StrictMode -Version Latest
@@ -38,14 +40,16 @@ try {
     $env:TEMP = Join-Path $taskBuildRoot 'temp'
     $env:TMP = $env:TEMP
     $taskCheck = @'
-import importlib.metadata as m, struct
+import importlib.metadata as m, struct, sys
 assert struct.calcsize('P') == 8, '64-bit Python required'
-assert m.version('pillow') == '12.3.0', 'Install requirements-build.txt'
-assert m.version('numpy') == '2.3.5', 'Install requirements-build.txt'
+if sys.argv[1] != 'go':
+    assert m.version('pillow') == '12.3.0', 'Install requirements-build.txt'
+    assert m.version('numpy') == '2.3.5', 'Install requirements-build.txt'
 assert m.version('pyinstaller') == '6.22.3', 'Install requirements-build.txt'
 print('64-bit Python and PyInstaller 6.22.3 ready')
 '@
-    & $taskPython -c $taskCheck
+    $taskBackend = if ($GoCore) { 'go' } else { 'python' }
+    & $taskPython -c $taskCheck $taskBackend
     if ($LASTEXITCODE -ne 0) { throw 'Build dependency check failed.' }
     if ($GoCore) {
         $taskGo = (Get-Command 'go' -ErrorAction Stop).Source
@@ -53,6 +57,7 @@ print('64-bit Python and PyInstaller 6.22.3 ready')
         if ($LASTEXITCODE -ne 0) { throw 'Go toolchain check failed.' }
     }
     if ($CheckOnly) { return }
+    if (-not $GoCore) {
     $taskCore = [IO.Path]::GetFullPath((Join-Path $taskBuildRoot 'core\owio-core'))
     if (-not $taskCore.StartsWith($taskBuildRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
         throw 'Core path escapes BuildRoot.'
@@ -65,6 +70,7 @@ print('64-bit Python and PyInstaller 6.22.3 ready')
     $taskArguments += (Join-Path $taskSourceRoot 'app.py')
     & $taskPython @taskArguments
     if ($LASTEXITCODE -ne 0) { throw 'Avolition backend build failed.' }
+    }
     $taskPackageArguments = @((Join-Path $taskSourceRoot 'tools\package_desktop.py'), '--source', $taskSourceRoot,
         '--build-root', $taskBuildRoot, '--electron', $taskElectronArchive)
     if ($GoCore) {

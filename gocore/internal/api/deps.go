@@ -4,7 +4,9 @@ import (
 	"avolition/gocore/internal/bonecounts"
 	"avolition/gocore/internal/c4dexport"
 	"avolition/gocore/internal/datatool"
+	"avolition/gocore/internal/exportbundle"
 	"avolition/gocore/internal/formats"
+	"avolition/gocore/internal/mapexport"
 	"avolition/gocore/internal/ordered"
 	"avolition/gocore/internal/toolchain"
 )
@@ -63,6 +65,8 @@ type Bridge interface {
 	// Export is export(payload, destination, texture_folder); it returns the
 	// warnings of the result.
 	Export(payload any, destination, textureFolder string) ([]string, error)
+	// MapBridge is the same client as map_export's bridge argument.
+	MapBridge() mapexport.Bridge
 }
 
 // AnalysisHooks are AnalysisManager's callbacks into the API.
@@ -89,19 +93,9 @@ type Materials = *c4dexport.Materials
 // materials and the warnings.
 type BakeMaterials func(asset *formats.Asset, textureFolder string) (Materials, []string, error)
 
-// Progress is a map export progress callback (message, completed, total).
-type Progress func(message string, completed, total any)
-
-// MapExporter is map_export.export_map.
-type MapExporter func(asset *formats.Asset, folder, name string, bakeTextures bool, bridge Bridge, progress Progress) (*ordered.Map[any], error)
-
-// MapJobs is map_jobs.MapExportJobs.
-type MapJobs interface {
-	Snapshot(jobID any) (any, error)
-	Start(operation func(Progress) (any, error)) (any, error)
-	Run(operation func(Progress) (any, error)) (any, error)
-	Close()
-}
+// MapExporter is map_export.export_map(asset, folder, name, bake_textures=,
+// bridge=, progress=).
+type MapExporter func(asset *formats.Asset, folder, name string, options mapexport.Options) (*exportbundle.Result, error)
 
 // Toolchain is toolchain.Manager.
 type Toolchain interface {
@@ -140,7 +134,6 @@ type Deps struct {
 	NewAnalysis     func(cacheDir string, hooks AnalysisHooks) Analysis
 	BakeMaterials   BakeMaterials
 	ExportMap       MapExporter
-	NewMapJobs      func() MapJobs
 	NewToolchain    func(root string, activity toolchain.ActivityLock) Toolchain
 	NewDataTool     func(stateDir string, activity datatool.ActivityLock) DataTool
 }
