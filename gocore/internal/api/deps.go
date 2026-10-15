@@ -1,6 +1,7 @@
 package api
 
 import (
+	"avolition/gocore/internal/bonecounts"
 	"avolition/gocore/internal/datatool"
 	"avolition/gocore/internal/formats"
 	"avolition/gocore/internal/ordered"
@@ -27,12 +28,6 @@ type DuplicateIndex interface {
 	// Annotate sets DuplicateKey, DuplicateCount and DuplicateError on every
 	// clip in place and returns at most 50 warnings.
 	Annotate(clips []*ClipEntry) []string
-}
-
-// BoneCountIndex is bone_counts.BoneCountIndex for one scan.
-type BoneCountIndex interface {
-	// Metadata is metadata(path): the total, or nil and the error text.
-	Metadata(path string) (count *int, errText string)
 }
 
 // ClipBindings is clip_bindings.ClipBindingIndex.
@@ -167,7 +162,8 @@ type Deps struct {
 	ValidatePaths   func(install, output string) datatool.Validation
 	NewTextures     func() TextureStore
 	NewDuplicates   func() DuplicateIndex
-	NewBoneCounts   func(root string, entityPaths []string) BoneCountIndex
+	// BoneCounts is BoneCountIndex(root, paths).metadata(path) for every path.
+	BoneCounts      func(root string, entityPaths []string) []bonecounts.Metadata
 	NewClipBindings func() ClipBindings
 	ObjectNames     ObjectNames
 	NewBridge       func(root string) Bridge

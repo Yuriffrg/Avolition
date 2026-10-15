@@ -209,11 +209,11 @@ func New(options Options) (*API, error) {
 	}
 	migrateFormats := false
 	saved, _ := a.catalog.Get("fbxOptions")
-	if dict, ok := saved.(*ordered.Map[any]); ok && !dict.Has("clipEnabled") {
+	if dict, ok := saved.(*ordered.Map[any]); ok && !hasKey(dict, "clipEnabled") {
 		// The old raw clip copy was implicit. Introduce the three explicit
 		// choices once without losing mesh/axis settings or library data.
 		migrateFormats = true
-		copied := dict.Clone()
+		copied := cloneDict(dict)
 		copied.Set("clipEnabled", false)
 		copied.Set("enabled", false)
 		copied.Set("c4dEnabled", true)
@@ -238,7 +238,7 @@ func New(options Options) (*API, error) {
 	if oldDict, ok := oldSort.(*ordered.Map[any]); ok && (!isInt || revisionInt < 1) {
 		if sortValue, _ := oldDict.Get("sort"); sortValue == "tracks-desc" {
 			migrateSort = true
-			copied := oldDict.Clone()
+			copied := cloneDict(oldDict)
 			copied.Set("sort", "object-match")
 			a.catalog.Set("libraryOptions", copied)
 		}
@@ -281,7 +281,7 @@ func New(options Options) (*API, error) {
 				defer a.mu.Unlock()
 				annotations, _ := a.catalog.Get("annotations")
 				if dict, ok := annotations.(*ordered.Map[any]); ok {
-					return dict.Clone()
+					return cloneDict(dict)
 				}
 				return ordered.New[any]()
 			},
