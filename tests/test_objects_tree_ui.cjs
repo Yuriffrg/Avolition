@@ -95,7 +95,7 @@ const click = locator => executable ? locator.dispatchEvent('click') : locator.c
   assert.equal(await page.locator('#objects-list').getAttribute('role'),'tree');
   assert.equal(await page.locator('#objects-list [data-kind="model"]').count(),0);
   assert.equal(await page.locator('#app-logo, .avolition-empty-logo, .empty-note').count(),0,'The workspace has no header or empty-preview branding.');
-  assert.equal(await page.locator('.local-badge .version').innerText(),'v0.8.22');
+  assert.equal(await page.locator('.local-badge .version').innerText(),'v0.8.23');
   const palette = await page.evaluate(() => {
     const rgb = value => (value.match(/[\d.]+/g)||[]).slice(0,3).map(Number);
     return [...document.querySelectorAll('select, option, optgroup')].map(element => {

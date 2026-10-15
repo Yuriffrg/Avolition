@@ -6,12 +6,15 @@ param(
     [string]$BuildRoot = '',
     [string]$ElectronArchive = '',
     [switch]$CheckOnly,
-    # Use the Go core (gocore/) as the complete backend instead of the
-    # PyInstaller-frozen app.py. Requires Go on PATH; Python is then used only
-    # by the packaging script (and PyInstaller's icon/version-resource helper).
+    # The Go core (gocore/) is the backend and needs Go on PATH; Python is then
+    # used only by the packaging script (and PyInstaller's icon/version helper).
+    # -PythonCore builds the legacy PyInstaller-frozen app.py backend instead.
+    [switch]$PythonCore,
+    # Accepted for compatibility with 0.8.22-era instructions; Go is the default.
     [switch]$GoCore
 )
 Set-StrictMode -Version Latest
+$taskUseGo = -not $PythonCore
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Build Avolition on Windows using 64-bit Python.' }
 $taskSourceRoot = [IO.Path]::GetFullPath($PSScriptRoot)
@@ -48,16 +51,16 @@ if sys.argv[1] != 'go':
 assert m.version('pyinstaller') == '6.22.3', 'Install requirements-build.txt'
 print('64-bit Python and PyInstaller 6.22.3 ready')
 '@
-    $taskBackend = if ($GoCore) { 'go' } else { 'python' }
+    $taskBackend = if ($taskUseGo) { 'go' } else { 'python' }
     & $taskPython -c $taskCheck $taskBackend
     if ($LASTEXITCODE -ne 0) { throw 'Build dependency check failed.' }
-    if ($GoCore) {
+    if ($taskUseGo) {
         $taskGo = (Get-Command 'go' -ErrorAction Stop).Source
         & $taskGo version
         if ($LASTEXITCODE -ne 0) { throw 'Go toolchain check failed.' }
     }
     if ($CheckOnly) { return }
-    if (-not $GoCore) {
+    if (-not $taskUseGo) {
     $taskCore = [IO.Path]::GetFullPath((Join-Path $taskBuildRoot 'core\owio-core'))
     if (-not $taskCore.StartsWith($taskBuildRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
         throw 'Core path escapes BuildRoot.'
@@ -73,7 +76,7 @@ print('64-bit Python and PyInstaller 6.22.3 ready')
     }
     $taskPackageArguments = @((Join-Path $taskSourceRoot 'tools\package_desktop.py'), '--source', $taskSourceRoot,
         '--build-root', $taskBuildRoot, '--electron', $taskElectronArchive)
-    if ($GoCore) {
+    if ($taskUseGo) {
         $taskGoCore = Join-Path $taskBuildRoot 'gocore\owio-core.exe'
         Push-Location (Join-Path $taskSourceRoot 'gocore')
         try {

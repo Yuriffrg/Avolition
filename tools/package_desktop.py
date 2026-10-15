@@ -14,11 +14,11 @@ def stamp_windows_branding(target, source):
     from PyInstaller.utils.win32 import icon, versioninfo
     icon.CopyIcons_FromIco(str(target/'Avolition.exe'), [str(source/'web/assets/avolition.ico')])
     info = versioninfo.VSVersionInfo(
-        ffi=versioninfo.FixedFileInfo(filevers=(0, 8, 22, 0), prodvers=(0, 8, 22, 0), fileType=1),
+        ffi=versioninfo.FixedFileInfo(filevers=(0, 8, 23, 0), prodvers=(0, 8, 23, 0), fileType=1),
         kids=[versioninfo.StringFileInfo([versioninfo.StringTable('040904B0', [
             versioninfo.StringStruct(key, value) for key, value in {
-                'FileDescription': 'Avolition', 'FileVersion': '0.8.22', 'InternalName': 'Avolition',
-                'OriginalFilename': 'Avolition.exe', 'ProductName': 'Avolition', 'ProductVersion': '0.8.22'
+                'FileDescription': 'Avolition', 'FileVersion': '0.8.23', 'InternalName': 'Avolition',
+                'OriginalFilename': 'Avolition.exe', 'ProductName': 'Avolition', 'ProductVersion': '0.8.23'
             }.items()])]), versioninfo.VarFileInfo([versioninfo.VarStruct('Translation', [1033, 1200])])])
     versioninfo.write_version_info_to_executable(str(target/'Avolition.exe'), info)
 
@@ -96,7 +96,7 @@ def main():
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(item, destination)
     (target/'START HERE.txt').write_text(
-        'Avolition 0.8.22\n\nExtract this entire folder, then double-click Avolition.exe.\n'
+        'Avolition 0.8.23\n\nExtract this entire folder, then double-click Avolition.exe.\n'
         'Keep Avolition.exe beside its resources, locales, and runtime files.\n'
         'Avolition opens its own desktop window. Preview needs no browser, Python, Cinema 4D, or internet.\n'
         'Optional C4D/Octane export requires Cinema 4D and the included Cinema 4D/Avolition C4D Bridge plugin.\n\n'
@@ -120,7 +120,7 @@ def main():
         'Map C4D export requires the bundled Avolition C4D Bridge 0.7.5. Map lights, sounds and effects are not included.\n'
         'Double-click scene, model or mesh names in Preview objects to rename them for future exports. Source files and joint names stay unchanged.\n'
         'Example assets contains a small synthetic rig for trying the controls.\n', encoding='utf-8')
-    (target/'BUILD.json').write_text(json.dumps({'app': 'Avolition', 'version': '0.8.22',
+    (target/'BUILD.json').write_text(json.dumps({'app': 'Avolition', 'version': '0.8.23',
         'electron': version, 'electronSHA256': actual,
         **({'backend': 'go'} if args.go_core else {'python': sys.version})}, indent=2), encoding='utf-8')
     stamp_windows_branding(target, source)

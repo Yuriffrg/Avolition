@@ -1,6 +1,6 @@
 # Avolition 0.8.12 third-party notices
 
-Avolition application source is distributed under GPL-3.0-or-later. The full GPL version 3 text is in `LICENSE`. Third-party components retain their own licenses and copyright notices. The portable release includes its Electron runtime and frozen Python backend; retain their supplied notices when redistributing the application folder.
+Avolition application source is distributed under GPL-3.0-or-later. The full GPL version 3 text is in `LICENSE`. Third-party components retain their own licenses and copyright notices. The portable release includes its Electron runtime and the Go backend (`resources/backend/owio-core.exe`); retain their supplied notices when redistributing the application folder. Builds made with `build.ps1 -PythonCore` ship the legacy frozen Python backend instead, described below.
 
 ## Avolition brand artwork
 
@@ -29,7 +29,20 @@ Three.js 0.186.0 and its OrbitControls module are used under the MIT license. Th
 
 Do not substitute the application's GPL text for these component notices. The original Electron runtime files and notices accompany `Avolition.exe`. The packaged shell source is under `resources/app`.
 
-## Python backend and build tools
+## Go backend
+
+Since 0.8.23 the backend `owio-core.exe` is compiled from `gocore/` with [Go](https://go.dev/) 1.24. The executable statically includes the Go standard library and runtime and two Go project modules; all three use the BSD-3-Clause license. Their original license texts are in `licenses/` (source) and `LICENSES/` (portable application):
+
+- Go standard library and runtime: `GO-LICENSE.txt`, Copyright 2009 The Go Authors.
+- `golang.org/x/image` v0.30.0 (BMP, TIFF and WebP decoding): `GOLANG-X-IMAGE-LICENSE.txt`.
+- `golang.org/x/sys` v0.35.0 (Windows process and job-object calls): `GOLANG-X-SYS-LICENSE.txt`.
+
+The Go backend decodes PNG, DDS, TGA, TIFF, JPEG, BMP and WebP textures with its own decoders and the modules above; it does not include Pillow, NumPy or CPython. The Pillow and NumPy behaviour it reproduces is described in `gocore/PORTING.md`.
+
+## Python backend and build tools (legacy `-PythonCore` builds)
+
+The packaging script `tools/package_desktop.py` still runs on Python and uses PyInstaller's Windows resource helper to stamp the icon and version; neither is shipped in a Go-backend build.
+
 
 The application bundles CPython and the required backend libraries under `resources/backend`. The backend is frozen with [PyInstaller](https://pyinstaller.org/), whose license includes its bootloader exception. Original CPython, PyInstaller, and collected dependency notices are retained in the application's `LICENSES` folder.
 
