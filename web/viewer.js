@@ -2,6 +2,7 @@ import * as THREE from './vendor/three.module.js';
 import { PreviewOrbitControls } from './navigation.js';
 import { createPoseEvaluator } from './pose.js';
 import { MaterialLibrary } from './materials.js';
+import { MapBatches } from './map-batching.js';
 
 // Binary core replies deliver mesh arrays as typed arrays, used without a
 // copy; JSON replies deliver number arrays.
@@ -177,7 +178,11 @@ export class PreviewViewport {
     // thousands of draw calls every frame after the camera has stopped.
     const moved = this.controls.update();
     if (!moved && !this._renderDirty) return;
+    // Material and visibility changes always invalidate; camera moves alone
+    // leave the map batches as they are.
+    if (this._renderDirty) this._mapBatches?.sync();
     this._updateCameraClipping();
+    this._mapBatches?.cull(this.camera);
     this.renderer.render(this.scene, this.camera);
     this._renderDirty = false;
   }
@@ -233,6 +238,8 @@ export class PreviewViewport {
     this._materialLibrary?.dispose();
     this._materialLibrary = null;
     this._loadedAsset = null;
+    this._mapBatches?.dispose();
+    this._mapBatches = null;
     const disposedGeometry = new Set();
     const disposedMaterials = new Set();
     const disposeMaterial = material => {
@@ -400,6 +407,10 @@ export class PreviewViewport {
           object.matrixAutoUpdate = false;
           object.matrixWorldAutoUpdate = false;
         });
+        // Placements sharing geometry and material draw as one instanced batch.
+        this._mapBatches = new MapBatches(this.scene);
+        for (const model of this.models) for (const mesh of [...model.meshes, ...model.overlays]) this._mapBatches.add(mesh);
+        this._mapBatches.sync();
       }
       this._loadedAsset = asset;
       return {models: this.models.length, meshes, bones: boneCount, vertices, polygons};
@@ -462,7 +473,10 @@ export class PreviewViewport {
     if (!this.renderer?.compileAsync) return Promise.resolve();
     this._compiled ||= new WeakMap();
     if (!this._compiled.has(material)) {
-      const probe = mesh.isSkinnedMesh ? new THREE.SkinnedMesh(mesh.geometry, material) : new THREE.Mesh(mesh.geometry, material);
+      const probe = mesh.isSkinnedMesh ? new THREE.SkinnedMesh(mesh.geometry, material)
+        // Batched map meshes are drawn with the instancing shader variant.
+        : this._mapBatches?.batchable(mesh, material) ? new THREE.InstancedMesh(mesh.geometry, material, 1)
+        : new THREE.Mesh(mesh.geometry, material);
       if (mesh.isSkinnedMesh) probe.bind(mesh.skeleton, mesh.bindMatrix);
       this._compiled.set(material, this.renderer.compileAsync(probe, this.camera, this.scene).catch(() => {}));
     }
@@ -613,6 +627,9 @@ export class PreviewViewport {
   _enableAnimatedTransforms() {
     if (!this._staticScene) return;
     this._staticScene = false;
+    // Animated transforms change world matrices: draw each mesh itself again.
+    this._mapBatches?.dispose();
+    this._mapBatches = null;
     this.assetRoot.traverse(object => { object.matrixWorldAutoUpdate = true; });
   }
 
