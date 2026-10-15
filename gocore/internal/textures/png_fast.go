@@ -7,9 +7,10 @@ import (
 
 // Fast path for non-interlaced PNG files: IDAT data is inflated by
 // inflate.go in one goroutine while this one unfilters each completed row
-// and converts it to RGBA with Pillow's mode rules.
+// and converts it to RGBA with Pillow's mode rules. rowsDone, when set, is
+// called from the calling goroutine each time more rows are complete.
 
-func decodePNGFast(data []byte, info pngInfo) (*Image, bool, error) {
+func decodePNGFast(data []byte, info pngInfo, rowsDone func(image *Image, rows int)) (*Image, bool, error) {
 	if len(data) < 29 || data[28] != 0 { // interlaced
 		return nil, false, nil
 	}
@@ -94,7 +95,11 @@ func decodePNGFast(data []byte, info pngInfo) (*Image, bool, error) {
 	var processErr error
 	for n := range progress {
 		if processErr == nil {
+			before := row
 			processErr = process(n)
+			if rowsDone != nil && row > before {
+				rowsDone(out, row)
+			}
 		}
 	}
 	wg.Wait()
@@ -111,6 +116,26 @@ func decodePNGFast(data []byte, info pngInfo) (*Image, bool, error) {
 		return nil, true, errTruncated
 	}
 	return out, true, nil
+}
+
+// unfilterPaeth4 is the Paeth case for 4 bytes per pixel (RGBA, the most
+// common texture layout) after the first pixel: the left and upper-left
+// bytes stay in registers and the slices are bounds-checked once per pixel.
+func unfilterPaeth4(current, previous []byte) {
+	a0, a1, a2, a3 := int(current[0]), int(current[1]), int(current[2]), int(current[3])
+	c0, c1, c2, c3 := int(previous[0]), int(previous[1]), int(previous[2]), int(previous[3])
+	previous = previous[:len(current)]
+	for i := 4; i+4 <= len(current); i += 4 {
+		x := current[i : i+4 : i+4]
+		p := previous[i : i+4 : i+4]
+		b0, b1, b2, b3 := int(p[0]), int(p[1]), int(p[2]), int(p[3])
+		x[0] += paethInt(a0, b0, c0)
+		x[1] += paethInt(a1, b1, c1)
+		x[2] += paethInt(a2, b2, c2)
+		x[3] += paethInt(a3, b3, c3)
+		a0, a1, a2, a3 = int(x[0]), int(x[1]), int(x[2]), int(x[3])
+		c0, c1, c2, c3 = b0, b1, b2, b3
+	}
 }
 
 func validDepth(colorType byte, depth int) bool {
@@ -149,25 +174,12 @@ func unfilter(filter byte, current, previous []byte, bpp int) bool {
 		for i := 0; i < bpp && i < n; i++ {
 			current[i] += previous[i]
 		}
+		if bpp == 4 && n%4 == 0 && n >= 4 {
+			unfilterPaeth4(current, previous)
+			break
+		}
 		for i := bpp; i < n; i++ {
-			a, b, c := int(current[i-bpp]), int(previous[i]), int(previous[i-bpp])
-			pa, pb, pc := b-c, a-c, a+b-2*c
-			if pa < 0 {
-				pa = -pa
-			}
-			if pb < 0 {
-				pb = -pb
-			}
-			if pc < 0 {
-				pc = -pc
-			}
-			if pa <= pb && pa <= pc {
-				current[i] += byte(a)
-			} else if pb <= pc {
-				current[i] += byte(b)
-			} else {
-				current[i] += byte(c)
-			}
+			current[i] += paethInt(int(current[i-bpp]), int(previous[i]), int(previous[i-bpp]))
 		}
 	default:
 		return false

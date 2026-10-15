@@ -25,6 +25,9 @@ type decoder struct {
 	name   string
 	config func(data []byte) (width, height int, err error)
 	decode func(data []byte) (*Image, error)
+	// decodeRows, when set, decodes like decode and also reports the image
+	// while it is being decoded, each time more rows from the top are final.
+	decodeRows func(data []byte, rowsDone func(image *Image, rows int)) (*Image, error)
 }
 
 var errNotThisFormat = errors.New("not this format")

@@ -118,6 +118,23 @@ func metalness(v byte) byte {
 // channels when specified. The source must be RGBA; the result is RGB, or
 // RGBA for the "rgba" channel.
 func ProcessChannels(source *Image, spec Spec) (*Image, error) {
+	_, convert, err := channelConverter(spec)
+	if err != nil {
+		return nil, err
+	}
+	if convert == nil {
+		result := &Image{source.Width, source.Height, 4, make([]byte, len(source.Pix))}
+		copy(result.Pix, source.Pix)
+		return result, nil
+	}
+	return mapPixels(source, convert), nil
+}
+
+// channelConverter validates spec like ProcessChannels and returns the
+// result's channel count and its conversion of RGBA pixels (in) to result
+// pixels (out), for any whole number of pixels. A nil convert keeps the RGBA
+// bytes unchanged.
+func channelConverter(spec Spec) (int, func(in, out []byte), error) {
 	channel := spec.Channel
 	if channel == "" {
 		channel = "rgba"
@@ -129,32 +146,30 @@ func ProcessChannels(source *Image, spec Spec) (*Image, error) {
 	if transform == "ow-normal" {
 		// OWM: Normal in the original Blender library uses stereographic
 		// packing, not the usual reconstruct-Z-from-RG convention.
-		return mapPixels(source, func(in, out []byte) {
+		return 3, func(in, out []byte) {
 			for i, o := 0, 0; i < len(in); i, o = i+4, o+3 {
 				out[o], out[o+1], out[o+2] = owNormal(in[i], in[i+1], in[i+2])
 			}
-		}), nil
+		}, nil
 	}
 	switch channel {
 	case "rgb":
 		if err := checkTransformOnColor(transform); err != nil {
-			return nil, err
+			return 0, nil, err
 		}
-		return mapPixels(source, func(in, out []byte) {
+		return 3, func(in, out []byte) {
 			for i, o := 0, 0; i < len(in); i, o = i+4, o+3 {
 				out[o], out[o+1], out[o+2] = in[i], in[i+1], in[i+2]
 			}
-		}), nil
+		}, nil
 	case "rgba":
 		if err := checkTransformOnColor(transform); err != nil {
-			return nil, err
+			return 0, nil, err
 		}
-		result := &Image{source.Width, source.Height, 4, make([]byte, len(source.Pix))}
-		copy(result.Pix, source.Pix)
-		return result, nil
+		return 4, nil, nil
 	case "r", "g", "b", "a", "luminance":
 	default:
-		return nil, fmt.Errorf("Unsupported texture channel: %s", channel)
+		return 0, nil, fmt.Errorf("Unsupported texture channel: %s", channel)
 	}
 	var post [256]byte // the scalar transform as a lookup table
 	for i := range post {
@@ -166,7 +181,7 @@ func ProcessChannels(source *Image, spec Spec) (*Image, error) {
 		case "ow-metalness":
 			post[i] = metalness(byte(i))
 		default:
-			return nil, fmt.Errorf("Unsupported texture transform: %s", transform)
+			return 0, nil, fmt.Errorf("Unsupported texture transform: %s", transform)
 		}
 	}
 	// Three's AO/roughness/metalness maps sample different RGB components.
@@ -176,12 +191,12 @@ func ProcessChannels(source *Image, spec Spec) (*Image, error) {
 		if spec.InputColorSpace == "srgb" { // spec.get('inputColorSpace', 'linear')
 			table = &srgbTable
 		}
-		return mapPixels(source, func(in, out []byte) {
+		return 3, func(in, out []byte) {
 			for i, o := 0, 0; i < len(in); i, o = i+4, o+3 {
 				v := post[luminance(table, in[i], in[i+1], in[i+2])]
 				out[o], out[o+1], out[o+2] = v, v, v
 			}
-		}), nil
+		}, nil
 	}
 	var lut [256]byte
 	for i := range lut {
@@ -192,12 +207,12 @@ func ProcessChannels(source *Image, spec Spec) (*Image, error) {
 		}
 	}
 	band := indexOf(channel)
-	return mapPixels(source, func(in, out []byte) {
+	return 3, func(in, out []byte) {
 		for i, o := band, 0; i < len(in); i, o = i+4, o+3 {
 			v := lut[in[i]]
 			out[o], out[o+1], out[o+2] = v, v, v
 		}
-	}), nil
+	}, nil
 }
 
 func indexOf(channel string) int {

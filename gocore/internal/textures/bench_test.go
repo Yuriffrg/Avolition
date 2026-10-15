@@ -102,7 +102,8 @@ func BenchmarkLoad(b *testing.B) {
 	}
 }
 
-// BenchmarkCompressionLevel compares flate levels on the 2048 preview.
+// BenchmarkCompressionLevel compares deflate.go (level 0) with compress/flate
+// levels on the 2048 preview.
 func BenchmarkCompressionLevel(b *testing.B) {
 	benchSetup(b)
 	source, _, err := LoadImage(filepath.Join(benchFolder, "rgba2048.png"), MaxPreviewEdge)
@@ -112,7 +113,7 @@ func BenchmarkCompressionLevel(b *testing.B) {
 	rgb, _ := ProcessChannels(source, Spec{Channel: "rgb"})
 	saved := CompressionLevel
 	defer func() { CompressionLevel = saved; stripPool = sync.Pool{New: stripPool.New} }()
-	for _, level := range []int{flate.BestSpeed, 2, 3, flate.DefaultCompression} {
+	for _, level := range []int{0, flate.BestSpeed, 2, 3, flate.DefaultCompression} {
 		b.Run(fmt.Sprintf("level%d", level), func(b *testing.B) {
 			CompressionLevel = level
 			stripPool = sync.Pool{New: stripPool.New}

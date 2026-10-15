@@ -7,7 +7,7 @@ import (
 	"image/png"
 )
 
-var pngDecoder = decoder{name: "PNG", config: pngConfig, decode: decodePNG}
+var pngDecoder = decoder{name: "PNG", config: pngConfig, decode: decodePNG, decodeRows: decodePNGRows}
 
 type pngInfo struct {
 	width, height int
@@ -58,12 +58,14 @@ func be16(b []byte, offset int) int {
 	return int(binary.BigEndian.Uint16(b[offset:]))
 }
 
-func decodePNG(data []byte) (*Image, error) {
+func decodePNG(data []byte) (*Image, error) { return decodePNGRows(data, nil) }
+
+func decodePNGRows(data []byte, rowsDone func(*Image, int)) (*Image, error) {
 	info, err := parsePNGInfo(data)
 	if err != nil {
 		return nil, err
 	}
-	if image, handled, err := decodePNGFast(data, info); handled {
+	if image, handled, err := decodePNGFast(data, info, rowsDone); handled {
 		return image, err
 	}
 	// Interlaced (and malformed) files go through image/png.

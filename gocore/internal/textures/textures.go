@@ -280,15 +280,18 @@ func (s *Store) Load(textureID string, maxEdge int) (*Result, error) {
 	generation := s.generation
 	s.mu.Unlock()
 
-	source, warning, err := s.image(spec.Path, maxEdge, generation)
+	channels, convert, specErr := channelConverter(spec)
+	if specErr != nil {
+		// Python reports image errors first (and caches the image).
+		if _, _, err := s.image(spec.Path, maxEdge, generation); err != nil {
+			return nil, err
+		}
+		return nil, specErr
+	}
+	result, err := s.render(spec.Path, maxEdge, generation, channels, convert)
 	if err != nil {
 		return nil, err
 	}
-	processed, err := ProcessChannels(source, spec)
-	if err != nil {
-		return nil, err
-	}
-	result := &Result{DataURI: DataURI(processed), Width: processed.Width, Height: processed.Height, Warning: warning}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -314,33 +317,50 @@ func (s *Store) Load(textureID string, maxEdge int) (*Result, error) {
 
 // image returns the decoded (and possibly reduced) RGBA source.
 func (s *Store) image(path string, maxEdge int, generation uint64) (*Image, string, error) {
-	resolved := resolve(path)
-	name := pypath.Name(resolved)
-	if !ImageExtensions[strings.ToLower(pypath.Suffix(resolved))] {
-		return nil, "", fmt.Errorf("%s: unsupported texture image format", name)
+	resolved, key, err := imageKeyOf(path, maxEdge)
+	if err != nil {
+		return nil, "", err
 	}
-	key := imageKey{resolved, maxEdge}
-	s.mu.Lock()
-	if element, ok := s.imageIndex[key]; ok {
-		s.images.MoveToBack(element)
-		entry := element.Value.(*imageEntry)
-		s.mu.Unlock()
+	if entry := s.cachedImage(key); entry != nil {
 		return entry.image, entry.warning, nil
 	}
-	s.mu.Unlock()
-
 	rgba, warning, err := LoadImage(resolved, maxEdge)
 	if err != nil {
 		return nil, "", err
 	}
+	rgba, warning = s.storeImage(key, rgba, warning, generation)
+	return rgba, warning, nil
+}
+
+func imageKeyOf(path string, maxEdge int) (string, imageKey, error) {
+	resolved := resolve(path)
+	if !ImageExtensions[strings.ToLower(pypath.Suffix(resolved))] {
+		return "", imageKey{}, fmt.Errorf("%s: unsupported texture image format", pypath.Name(resolved))
+	}
+	return resolved, imageKey{resolved, maxEdge}, nil
+}
+
+func (s *Store) cachedImage(key imageKey) *imageEntry {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if element, ok := s.imageIndex[key]; ok {
+		s.images.MoveToBack(element)
+		return element.Value.(*imageEntry)
+	}
+	return nil
+}
+
+// storeImage caches a decoded source unless a registration happened since
+// generation; a source cached meanwhile by a concurrent load wins.
+func (s *Store) storeImage(key imageKey, rgba *Image, warning string, generation uint64) (*Image, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if element, ok := s.imageIndex[key]; ok {
 		entry := element.Value.(*imageEntry)
-		return entry.image, entry.warning, nil
+		return entry.image, entry.warning
 	}
 	if s.generation != generation {
-		return rgba, warning, nil
+		return rgba, warning
 	}
 	needed := rgba.Width * rgba.Height * 4
 	for s.images.Len() > 0 && s.imageBytes+needed > CacheBytes {
@@ -352,12 +372,137 @@ func (s *Store) image(path string, maxEdge int, generation uint64) (*Image, stri
 	}
 	s.imageIndex[key] = s.images.PushBack(&imageEntry{key, rgba, warning})
 	s.imageBytes += needed
-	return rgba, warning, nil
+	return rgba, warning
+}
+
+// render produces the preview of the source at path. An uncached source is
+// decoded in another goroutine while this one filters and compresses the
+// rows decoded so far, so decoding and PNG encoding overlap; the channel
+// conversion is applied row by row as rows are encoded.
+func (s *Store) render(path string, maxEdge int, generation uint64, channels int, convert func(in, out []byte)) (*Result, error) {
+	resolved, key, err := imageKeyOf(path, maxEdge)
+	if err != nil {
+		return nil, err
+	}
+	if entry := s.cachedImage(key); entry != nil {
+		uri, _ := dataURI(previewRows(entry.image, channels, convert, nil))
+		return &Result{DataURI: uri, Width: entry.image.Width, Height: entry.image.Height, Warning: entry.warning}, nil
+	}
+	stream := newImageStream()
+	go func() {
+		rgba, warning, err := loadImage(resolved, maxEdge, stream.progress)
+		stream.finish(rgba, warning, err)
+	}()
+	var uri string
+	if partial := stream.waitImage(); partial != nil {
+		uri, _ = dataURI(previewRows(partial, channels, convert, stream.waitRows))
+	}
+	rgba, warning, err := stream.result()
+	if err != nil {
+		return nil, err
+	}
+	// The image is complete: encode it if it was not published while
+	// decoding (a reduced source) or is not the one encoded.
+	if uri == "" || stream.partial != rgba {
+		uri, _ = dataURI(previewRows(rgba, channels, convert, nil))
+	}
+	s.storeImage(key, rgba, warning, generation)
+	return &Result{DataURI: uri, Width: rgba.Width, Height: rgba.Height, Warning: warning}, nil
+}
+
+// previewRows is the preview of an RGBA source: convert applied to each row
+// (nil keeps RGBA). wait, when set, waits for source rows.
+func previewRows(source *Image, channels int, convert func(in, out []byte), wait func(int) bool) rowSource {
+	stride := source.Width * 4
+	rows := rowSource{width: source.Width, height: source.Height, channels: channels, wait: wait, sample: previewFilterSample}
+	if convert == nil {
+		rows.row = func(y int, _ []byte) []byte { return source.Pix[y*stride : (y+1)*stride] }
+	} else {
+		rows.row = func(y int, scratch []byte) []byte {
+			convert(source.Pix[y*stride:(y+1)*stride], scratch)
+			return scratch
+		}
+	}
+	return rows
+}
+
+// imageStream hands an image that is still being decoded from the decoding
+// goroutine to the encoder: rows [0, rows) of partial are final.
+type imageStream struct {
+	mu      sync.Mutex
+	changed sync.Cond
+	partial *Image
+	rows    int
+	done    bool
+	image   *Image
+	warning string
+	err     error
+}
+
+func newImageStream() *imageStream {
+	stream := &imageStream{}
+	stream.changed.L = &stream.mu
+	return stream
+}
+
+func (s *imageStream) progress(image *Image, rows int) {
+	s.mu.Lock()
+	s.partial, s.rows = image, rows
+	s.mu.Unlock()
+	s.changed.Broadcast()
+}
+
+func (s *imageStream) finish(image *Image, warning string, err error) {
+	s.mu.Lock()
+	s.image, s.warning, s.err, s.done = image, warning, err, true
+	s.mu.Unlock()
+	s.changed.Broadcast()
+}
+
+// waitImage returns the image being decoded, or nil when decoding finished
+// without publishing one.
+func (s *imageStream) waitImage() *Image {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for s.partial == nil && !s.done {
+		s.changed.Wait()
+	}
+	return s.partial
+}
+
+// waitRows waits until rows [0, n) of the partial image are final; false
+// when decoding ended without them.
+func (s *imageStream) waitRows(n int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for s.rows < n {
+		if s.done {
+			// A successful decode may finish before its last report.
+			return s.err == nil && s.image == s.partial
+		}
+		s.changed.Wait()
+	}
+	return true
+}
+
+func (s *imageStream) result() (*Image, string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for !s.done {
+		s.changed.Wait()
+	}
+	return s.image, s.warning, s.err
 }
 
 // LoadImage decodes a resolved texture path to RGBA, applying the preview
 // limits, and reduces it so its longest edge is at most maxEdge.
 func LoadImage(path string, maxEdge int) (*Image, string, error) {
+	return loadImage(path, maxEdge, nil)
+}
+
+// loadImage is LoadImage; rowsDone, when set, receives the decoded image
+// while it is decoded, if it needs no reduction (see decodeImage).
+func loadImage(path string, maxEdge int, rowsDone func(*Image, int)) (*Image, string, error) {
 	name := pypath.Name(path)
 	info, err := os.Stat(path)
 	if err != nil {
@@ -370,12 +515,20 @@ func LoadImage(path string, maxEdge int) (*Image, string, error) {
 	if err != nil {
 		return nil, "", pyOSError(err)
 	}
-	rgba, err := DecodeImage(data, func(width, height int) error {
+	var partial func(*Image, int)
+	if rowsDone != nil {
+		partial = func(image *Image, rows int) {
+			if max(image.Width, image.Height) <= maxEdge { // else the reduction is the result
+				rowsDone(image, rows)
+			}
+		}
+	}
+	rgba, err := decodeImage(data, func(width, height int) error {
 		if width*height > MaxSourcePixels {
 			return fmt.Errorf("%s: texture exceeds the 64-megapixel preview limit", name)
 		}
 		return nil
-	})
+	}, partial)
 	if err != nil {
 		if errors.Is(err, errUnidentified) {
 			return nil, "", fmt.Errorf("cannot identify image file %s", pyRepr(path))
@@ -399,6 +552,12 @@ var errUnidentified = errors.New("cannot identify image file")
 // DecodeImage decodes image bytes like Image.open(...).convert('RGBA');
 // check runs with the image size before the pixels are decoded.
 func DecodeImage(data []byte, check func(width, height int) error) (*Image, error) {
+	return decodeImage(data, check, nil)
+}
+
+// decodeImage is DecodeImage; rowsDone, when set, may be called while the
+// image is decoded with the image and how many rows from the top are final.
+func decodeImage(data []byte, check func(width, height int) error, rowsDone func(*Image, int)) (*Image, error) {
 	format := detect(data)
 	if format == nil {
 		return nil, errUnidentified
@@ -414,6 +573,9 @@ func DecodeImage(data []byte, check func(width, height int) error) (*Image, erro
 		if err := check(width, height); err != nil {
 			return nil, err
 		}
+	}
+	if rowsDone != nil && format.decodeRows != nil {
+		return format.decodeRows(data, rowsDone)
 	}
 	return format.decode(data)
 }
