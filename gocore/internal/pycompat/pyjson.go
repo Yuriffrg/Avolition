@@ -12,8 +12,8 @@ import (
 // JSONDecodeError is json.JSONDecodeError (a ValueError): str() is
 // "<msg>: line L column C (char N)" with positions in code points.
 type JSONDecodeError struct {
-	Msg              string
-	Pos, Line, Col   int
+	Msg            string
+	Pos, Line, Col int
 }
 
 func (e *JSONDecodeError) Error() string {

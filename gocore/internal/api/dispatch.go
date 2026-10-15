@@ -55,8 +55,10 @@ func init() {
 			func(a *API, x []any) (any, error) { return a.ExportAnimation(x[0], x[1], x[2], x[3]) }),
 		"export_animation_set": m("entity_path,assignments,scene_name,output_folder,options", 3, []any{nil, nil}, "bridge,objectNames",
 			func(a *API, x []any) (any, error) { return a.ExportAnimationSet(x[0], x[1], x[2], x[3], x[4]) }),
-		"c4d_status":    m("", 0, nil, "bridge", func(a *API, _ []any) (any, error) { return a.bridge.Status(), nil }),
-		"browse_entity": m("", 0, nil, "", func(*API, []any) (any, error) { return nil, &runtimeError{"File dialogs are provided by the Avolition desktop window."} }),
+		"c4d_status": m("", 0, nil, "bridge", func(a *API, _ []any) (any, error) { return a.bridge.Status(), nil }),
+		"browse_entity": m("", 0, nil, "", func(*API, []any) (any, error) {
+			return nil, &runtimeError{"File dialogs are provided by the Avolition desktop window."}
+		}),
 		"scan_root": m("value,activate", 1, []any{true}, "duplicates", func(a *API, x []any) (any, error) {
 			return a.ScanRoot(x[0], x[1])
 		}),
@@ -254,7 +256,9 @@ func IsUnavailable(err error) bool {
 // assetData encodes an asset reply with formats.AppendAssetJSON.
 type assetData struct{ asset *formats.Asset }
 
-func (d assetData) AppendJSON(dst []byte) ([]byte, error) { return formats.AppendAssetJSON(dst, d.asset) }
+func (d assetData) AppendJSON(dst []byte) ([]byte, error) {
+	return formats.AppendAssetJSON(dst, d.asset)
+}
 
 // clipData encodes a clip reply with formats.AppendClipJSON.
 type clipData struct{ clip *formats.Clip }

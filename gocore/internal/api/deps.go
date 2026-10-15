@@ -1,8 +1,8 @@
 package api
 
 import (
-	"avolition/gocore/internal/c4dexport"
 	"avolition/gocore/internal/bonecounts"
+	"avolition/gocore/internal/c4dexport"
 	"avolition/gocore/internal/datatool"
 	"avolition/gocore/internal/formats"
 	"avolition/gocore/internal/ordered"
@@ -125,13 +125,13 @@ type DataTool interface {
 // ported yet: methods needing them fail with ErrUnavailable, and the Go core
 // forwards those methods to the Python core (see Unavailable).
 type Deps struct {
-	LoadAsset       func(path, root string) (*formats.Asset, error)
-	LoadClip        func(path string) (*formats.Clip, error)
-	ReadClipHeader  func(path string) (*formats.ClipHeader, error)
-	LoadMap         func(path, root string) (*formats.Asset, error)
-	ValidatePaths   func(install, output string) datatool.Validation
-	NewTextures     func() TextureStore
-	NewDuplicates   func() DuplicateIndex
+	LoadAsset      func(path, root string) (*formats.Asset, error)
+	LoadClip       func(path string) (*formats.Clip, error)
+	ReadClipHeader func(path string) (*formats.ClipHeader, error)
+	LoadMap        func(path, root string) (*formats.Asset, error)
+	ValidatePaths  func(install, output string) datatool.Validation
+	NewTextures    func() TextureStore
+	NewDuplicates  func() DuplicateIndex
 	// BoneCounts is BoneCountIndex(root, paths).metadata(path) for every path.
 	BoneCounts      func(root string, entityPaths []string) []bonecounts.Metadata
 	NewClipBindings func() ClipBindings

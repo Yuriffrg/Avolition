@@ -10,8 +10,8 @@ import (
 	"avolition/gocore/internal/datatool"
 	"avolition/gocore/internal/duplicates"
 	"avolition/gocore/internal/formats"
-	_ "avolition/gocore/internal/materials" // load_asset's real materials
 	"avolition/gocore/internal/mapformats"
+	_ "avolition/gocore/internal/materials" // load_asset's real materials
 	"avolition/gocore/internal/objectnames"
 	"avolition/gocore/internal/ordered"
 	"avolition/gocore/internal/textures"
@@ -29,9 +29,11 @@ func Default() Deps {
 		ValidatePaths: func(install, output string) datatool.Validation {
 			return datatool.ValidatePaths(install, output)
 		},
-		NewTextures:     func() TextureStore { return textureStore{textures.NewStore()} },
-		NewDuplicates:   func() DuplicateIndex { return duplicateIndex{duplicates.New(duplicates.DefaultMaxEntries)} },
-		BoneCounts:      func(root string, paths []string) []bonecounts.Metadata { return bonecounts.New(root, paths).MetadataAll(paths) },
+		NewTextures:   func() TextureStore { return textureStore{textures.NewStore()} },
+		NewDuplicates: func() DuplicateIndex { return duplicateIndex{duplicates.New(duplicates.DefaultMaxEntries)} },
+		BoneCounts: func(root string, paths []string) []bonecounts.Metadata {
+			return bonecounts.New(root, paths).MetadataAll(paths)
+		},
 		NewClipBindings: func() ClipBindings { return clipBindings{clipbindings.NewDefault()} },
 		NewBridge:       func(root string) Bridge { return &bridgeClient{c4dbridge.NewClient(root)} },
 		NewAnalysis:     newAnalysis,
@@ -106,8 +108,8 @@ func (c clipBindings) Read(paths any) (any, error) { return c.index.Read(paths) 
 
 type bridgeClient struct{ client *c4dbridge.Client }
 
-func (b *bridgeClient) Root() string          { return b.client.Root }
-func (b *bridgeClient) Status() BridgeStatus  { return b.client.Status() }
+func (b *bridgeClient) Root() string              { return b.client.Root }
+func (b *bridgeClient) Status() BridgeStatus      { return b.client.Status() }
 func (b *bridgeClient) Client() *c4dbridge.Client { return b.client }
 
 func (b *bridgeClient) Export(payload any, destination, textureFolder string) ([]string, error) {
@@ -206,7 +208,9 @@ func (objectNames) ValidateName(name any) (string, error) { return objectnames.V
 func (objectNames) ValidateNames(names any, asset *formats.Asset) (*ordered.Map[string], error) {
 	return objectnames.ValidateNames(names, asset)
 }
-func (objectNames) Keys(asset *formats.Asset) (map[string]bool, error) { return objectnames.ObjectNameKeys(asset) }
+func (objectNames) Keys(asset *formats.Asset) (map[string]bool, error) {
+	return objectnames.ObjectNameKeys(asset)
+}
 func (objectNames) Apply(asset *formats.Asset, names any) (*formats.Asset, error) {
 	return objectnames.ApplyObjectNames(asset, names)
 }

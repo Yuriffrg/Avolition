@@ -203,7 +203,7 @@ func utf16Len(s string) int {
 	return n
 }
 
-// strOrEmpty is str(value or '').
+// strOrEmpty is str(value or ”).
 func strOrEmpty(value any) string {
 	if !pycompat.Truthy(value) {
 		return ""

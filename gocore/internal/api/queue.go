@@ -11,6 +11,9 @@ import (
 	"avolition/gocore/internal/pypath"
 )
 
+// maxExportQueue is MAX_EXPORT_QUEUE (tests lower it).
+var maxExportQueue = MaxExportQueue
+
 var queueIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 func nonEmptyString(value any) bool {
@@ -209,8 +212,8 @@ func (a *API) ExportQueueSave(value any) (any, error) {
 		return nil, newValueError("This export list entry no longer exists. Add it again.")
 	}
 	if existing < 0 {
-		if len(entries) >= MaxExportQueue {
-			return nil, newValueError(fmt.Sprintf("The export list is limited to %d entries. Remove completed entries first.", MaxExportQueue))
+		if len(entries) >= maxExportQueue {
+			return nil, newValueError(fmt.Sprintf("The export list is limited to %d entries. Remove completed entries first.", maxExportQueue))
 		}
 		entries = append(entries, record)
 	} else {
@@ -313,6 +316,10 @@ func (a *API) ExportQueueRun(value, outputFolder, options any) (any, error) {
 	}
 	settings.Set("rootPath", get(snapshot, "rootPath"))
 	settings.Set("objectNames", getOr(snapshot, "objectNames", ordered.New[any]()))
-	return a.ExportAnimationSet(get(snapshot, "entityPath"), get(snapshot, "assignments"), get(snapshot, "name"),
+	exportSet := a.ExportAnimationSet
+	if a.exportSetHook != nil {
+		exportSet = a.exportSetHook
+	}
+	return exportSet(get(snapshot, "entityPath"), get(snapshot, "assignments"), get(snapshot, "name"),
 		destination, settings)
 }

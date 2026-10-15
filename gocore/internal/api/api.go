@@ -85,6 +85,10 @@ type API struct {
 	toolchain     Toolchain
 	datatool      DataTool
 	analysis      Analysis
+
+	// Test seams (the Python tests patch these attributes).
+	saveHook      func() error
+	exportSetHook func(entityPath, assignments, sceneName, outputFolder, options any) (any, error)
 }
 
 func lookupEnv(name string) string {
@@ -420,6 +424,9 @@ func (a *API) readCatalog() error {
 
 // save is _save: an atomic replace of catalog.json. Callers hold mu.
 func (a *API) save() error {
+	if a.saveHook != nil { // tests: patch.object(api, '_save')
+		return a.saveHook()
+	}
 	encoded, err := pycompat.Dumps(a.catalog, 2)
 	if err != nil {
 		return err
