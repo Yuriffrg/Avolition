@@ -213,7 +213,7 @@ class BrowserAPI:
                 'exportQueue': queue,
                 'maps': self._map_settings(),
                 'mapExport': self._map_exports.snapshot(),
-                'version': '0.8.22', 'appName': 'Avolition', 'browserMode': not self._desktop_mode}
+                'version': '0.8.23', 'appName': 'Avolition', 'browserMode': not self._desktop_mode}
 
     def _map_settings(self):
         saved = self._catalog.get('maps', {})

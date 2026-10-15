@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 
+	"avolition/gocore/internal/formats"
 	"avolition/gocore/internal/protocol"
 	"avolition/gocore/internal/pycompat"
 )
@@ -29,6 +30,11 @@ func AppendData(dst []byte, data any) ([]byte, error) {
 	if appender, ok := data.(Appender); ok {
 		return appender.AppendJSON(dst)
 	}
+	return appendValue(dst, data)
+}
+
+// appendValue appends json.Marshal(data) without HTML escaping.
+func appendValue(dst []byte, data any) ([]byte, error) {
 	buffer := bytes.NewBuffer(dst)
 	encoder := json.NewEncoder(buffer)
 	encoder.SetEscapeHTML(false)
@@ -79,18 +85,43 @@ func AppendReply(dst []byte, id json.RawMessage, data any, err error) []byte {
 }
 
 // Handle runs one request line (without its terminator) and appends the
-// reply line, like one iteration of run_stdio.
+// reply line, like one iteration of run_stdio, or the whole binary frame when
+// the request asked for one.
 func (a *API) Handle(dst []byte, line []byte) []byte {
+	dst, blobs := a.handle(dst, line)
+	if blobs != nil {
+		for _, blob := range blobs.Items {
+			dst = append(dst, blob.Data...)
+			dst = append(dst, zeros[:padding(len(blob.Data))]...)
+		}
+	}
+	return dst
+}
+
+// handle appends the reply line, or a binary frame's JSON line and returns
+// the blobs that follow it.
+func (a *API) handle(dst []byte, line []byte) ([]byte, *formats.Blobs) {
 	request, failure := protocol.Parse(line)
 	if failure != nil {
-		return AppendReply(dst, failure.ID, nil, errors.New(failure.Message))
+		return AppendReply(dst, failure.ID, nil, errors.New(failure.Message)), nil
 	}
 	args, err := DecodeArgs(request.Args)
 	if err != nil {
-		return AppendReply(dst, request.ID, nil, err)
+		return AppendReply(dst, request.ID, nil, err), nil
 	}
 	data, err := a.Call(request.Method, args)
-	return AppendReply(dst, request.ID, data, err)
+	if !request.Binary {
+		return AppendReply(dst, request.ID, data, err), nil
+	}
+	start := len(dst)
+	dst = append(dst, `{"id":`...)
+	dst = append(dst, request.ID...)
+	dst = append(dst, `,"result":`...)
+	dst, blobs := appendResultFrame(dst, data, err)
+	if blobs == nil {
+		return append(dst, "}\n"...), nil
+	}
+	return appendFrameTail(dst, start, blobs), blobs
 }
 
 // ServeStdio is run_stdio: one JSON request per line in, one reply per line
@@ -109,9 +140,15 @@ func (a *API) ServeStdio(in io.Reader, out io.Writer) error {
 			}
 		}
 		if len(line) > 0 || readErr == nil {
-			buffer = a.Handle(buffer[:0], line)
+			var blobs *formats.Blobs
+			buffer, blobs = a.handle(buffer[:0], line)
 			if _, err := writer.Write(buffer); err != nil {
 				return err
+			}
+			if blobs != nil {
+				if err := writeBlobs(writer, blobs); err != nil {
+					return err
+				}
 			}
 			if err := writer.Flush(); err != nil {
 				return err

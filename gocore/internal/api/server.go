@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 
+	"avolition/gocore/internal/formats"
 	"avolition/gocore/internal/protocol"
 	"avolition/gocore/internal/pycompat"
 )
@@ -84,9 +85,18 @@ func (s *Server) bridge() string {
 		return out
 	}(), -1)
 	token, _ := pycompat.Dumps(s.token, -1)
-	return `<script>window.pywebview={api:{}};` +
-		`for(const method of ` + string(methods) + `){window.pywebview.api[method]=(...args)=>fetch("/api/"+method,{method:"POST",headers:{"Content-Type":"application/json","X-Preview-Token":` + string(token) + `},body:JSON.stringify(args)}).then(r=>r.json());}` +
-		`</script>`
+	// The bridge asks for binary frames (frames.go) and turns their blobs into
+	// typed arrays viewing the response buffer, like the desktop host does.
+	return `<script>window.pywebview={api:{}};(()=>{` +
+		`const types={f32:Float32Array,f64:Float64Array,u32:Uint32Array,u16:Uint16Array,u8:Uint8Array};` +
+		`const attach=(value,arrays)=>{if(Array.isArray(value)){for(let i=0;i<value.length;i++)if(value[i]&&typeof value[i]==="object")value[i]=attach(value[i],arrays);return value;}` +
+		`if(Object.hasOwn(value,"$blob"))return arrays[value.$blob];for(const key in value)if(value[key]&&typeof value[key]==="object")value[key]=attach(value[key],arrays);return value;};` +
+		`const frame=buffer=>{const bytes=new Uint8Array(buffer),end=bytes.indexOf(10),head=JSON.parse(new TextDecoder().decode(bytes.subarray(0,end)));let offset=end+1;` +
+		`const arrays=head.blobs.map(([type,length])=>{const Type=types[type],array=new Type(buffer,offset,length/Type.BYTES_PER_ELEMENT);offset+=length+(8-length%8)%8;return array;});` +
+		`return head.result&&typeof head.result==="object"?attach(head.result,arrays):head.result;};` +
+		`for(const method of ` + string(methods) + `){window.pywebview.api[method]=(...args)=>fetch("/api/"+method,{method:"POST",headers:{"Content-Type":"application/json","X-Preview-Token":` + string(token) + `,"X-Avolition-Binary":"1"},body:JSON.stringify(args)})` +
+		`.then(r=>r.headers.get("Content-Type")===` + strconv.Quote(FrameContentType) + `?r.arrayBuffer().then(frame):r.json());}` +
+		`})();</script>`
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +164,25 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request) {
 		}
 		return s.api.Call(method, args)
 	}()
-	line = AppendResult(line, data, err)
+	if r.Header.Get("X-Avolition-Binary") == "1" {
+		// The bridge script accepts binary frames (frames.go).
+		const prefix = `{"result":`
+		var blobs *formats.Blobs
+		line, blobs = appendResultFrame(append(line, prefix...), data, err)
+		if blobs != nil {
+			line = appendFrameTail(line, 0, blobs)
+			w.Header().Set("Content-Type", FrameContentType)
+			w.Header().Set("Content-Length", strconv.Itoa(len(line)+frameSize(blobs)))
+			w.WriteHeader(http.StatusOK)
+			if _, err := w.Write(line); err == nil {
+				_ = writeBlobs(w, blobs)
+			}
+			return
+		}
+		line = line[len(prefix):]
+	} else {
+		line = AppendResult(line, data, err)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Length", strconv.Itoa(len(line)))
 	w.WriteHeader(http.StatusOK)
