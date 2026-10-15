@@ -584,16 +584,8 @@ func (a *API) ScanRoot(value, activate any) (any, error) {
 					}
 					entities = append(entities, &EntityEntry{Path: item, Name: name, RelativePath: relativeTo(item, path), Kind: kind})
 				case ".owanimclip":
-					entry := &ClipEntry{}
-					if header, err := a.deps.ReadClipHeader(item); err == nil {
-						entry.Header = header
-					} else {
-						var size int64
-						if info, statErr := os.Stat(item); statErr == nil {
-							size = info.Size()
-						}
-						entry.Path, entry.Name, entry.Size, entry.ErrorText = item, name, size, errorText(err)
-					}
+					// The header is read below, in parallel with the others.
+					entry := &ClipEntry{Path: item, Name: name}
 					entry.RelativePath = relativeTo(item, path)
 					entry.Annotation = annotation(item)
 					clips = append(clips, entry)
@@ -602,6 +594,20 @@ func (a *API) ScanRoot(value, activate any) (any, error) {
 			return count <= 250000
 		})
 	}
+	// Clip headers are independent small reads (one open per file, which is
+	// slow on Windows), so they run on a bounded worker pool.
+	parallelFor(len(clips), func(i int) {
+		entry := clips[i]
+		if header, err := a.deps.ReadClipHeader(entry.Path); err == nil {
+			entry.Header, entry.Path, entry.Name = header, "", ""
+		} else {
+			var size int64
+			if info, statErr := os.Stat(entry.Path); statErr == nil {
+				size = info.Size()
+			}
+			entry.Size, entry.ErrorText = size, errorText(err)
+		}
+	})
 	libraryscan.SortEntities(entities, func(e *EntityEntry) libraryscan.Item {
 		return libraryscan.Item{Kind: e.Kind, RelativePath: e.RelativePath, Path: e.Path, Name: e.Name}
 	})
