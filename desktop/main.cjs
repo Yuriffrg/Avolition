@@ -2,11 +2,11 @@
 
 const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, net, session, nativeTheme, shell } = require('electron');
 const { spawn } = require('node:child_process');
-const { StringDecoder } = require('node:string_decoder');
 const { pathToFileURL } = require('node:url');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { ReplyReader } = require('./frames.cjs');
 
 const APP_URL = 'whitehound://app/index.html';
 const ALLOWED_METHODS = new Set([
@@ -19,7 +19,11 @@ const ALLOWED_METHODS = new Set([
 const REQUEST_TIMEOUT = 180000;
 const MAX_PENDING = 128;
 const MAX_REQUEST_BYTES = 1024 * 1024;
-const MAX_RESPONSE_CHARS = 256 * 1024 * 1024;
+const MAX_RESPONSE_BYTES = 256 * 1024 * 1024;
+// Ask for bulk arrays as binary frames (frames.cjs). Cores that do not support
+// them ignore the request key and reply in JSON. AVOLITION_BINARY_ARRAYS=0
+// forces JSON replies, e.g. to compare both paths.
+const BINARY_ARRAYS = process.env.AVOLITION_BINARY_ARRAYS !== '0';
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'";
 
 function optionsFromArgs(argv) {
@@ -88,8 +92,7 @@ class Backend {
   constructor(executable) {
     this.pending = new Map();
     this.nextId = 1;
-    this.fragments = [];
-    this.fragmentLength = 0;
+    this.reader = new ReplyReader(message => this.deliver(message), MAX_RESPONSE_BYTES);
     this.failed = null;
     this.stopping = false;
     const applicationDirectory = app.isPackaged ? path.dirname(process.execPath) : path.resolve(__dirname, '..');
@@ -101,9 +104,7 @@ class Backend {
       cwd: path.dirname(executable), windowsHide: true, shell: false, stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' },
     });
-    const decoder = new StringDecoder('utf8');
-    this.child.stdout.on('data', chunk => this.accept(decoder.write(chunk)));
-    this.child.stdout.on('end', () => { const tail = decoder.end(); if (tail) this.accept(tail); });
+    this.child.stdout.on('data', chunk => this.accept(chunk));
     this.child.stderr.on('data', chunk => log(`core: ${chunk.toString('utf8')}`));
     this.child.stdin.on('error', error => this.fail(error));
     this.child.on('error', error => this.fail(error));
@@ -122,37 +123,22 @@ class Backend {
     if (mainWindow && !mainWindow.isDestroyed() && !finishingSmoke) void fatal(this.failed);
   }
 
-  accept(text) {
+  accept(chunk) {
     if (this.failed || this.stopping) return;
-    let start = 0;
-    while (start < text.length) {
-      const newline = text.indexOf('\n', start);
-      const segment = text.slice(start, newline < 0 ? undefined : newline);
-      this.fragmentLength += segment.length;
-      if (this.fragmentLength > MAX_RESPONSE_CHARS) {
-        this.fail(new Error('Local importer response exceeds the preview size limit.'));
-        return;
-      }
-      if (segment) this.fragments.push(segment);
-      if (newline < 0) return;
-      const line = this.fragments.join('');
-      this.fragments = [];
-      this.fragmentLength = 0;
-      start = newline + 1;
-      if (!line.trim()) continue;
-      try {
-        const message = JSON.parse(line);
-        const entry = this.pending.get(message.id);
-        if (!entry) continue; // A response to a request that timed out earlier.
-        if (!message.result || typeof message.result.ok !== 'boolean') throw new Error('Invalid local importer response.');
-        this.pending.delete(message.id);
-        clearTimeout(entry.timer);
-        entry.resolve(message.result);
-      } catch (error) {
-        this.fail(new Error(`Could not read the local importer response: ${error.message}`));
-        return;
-      }
+    try { this.reader.push(chunk); }
+    catch (error) {
+      this.fail(error.code === 'RESPONSE_TOO_LARGE' ? error : new Error(`Could not read the local importer response: ${error.message}`));
     }
+  }
+
+  deliver(message) {
+    if (this.failed || this.stopping) return;
+    const entry = this.pending.get(message.id);
+    if (!entry) return; // A response to a request that timed out earlier.
+    if (!message.result || typeof message.result.ok !== 'boolean') throw new Error('Invalid local importer response.');
+    this.pending.delete(message.id);
+    clearTimeout(entry.timer);
+    entry.resolve(message.result);
   }
 
   call(method, args = []) {
@@ -160,7 +146,7 @@ class Backend {
     if (this.stopping || !this.child.stdin.writable) return Promise.reject(new Error('The local importer is closed.'));
     if (this.pending.size >= MAX_PENDING) return Promise.reject(new Error('Too many operations are pending. Wait for the current import to finish.'));
     const id = this.nextId++;
-    const request = JSON.stringify({ id, method, args }) + '\n';
+    const request = JSON.stringify(BINARY_ARRAYS ? { id, method, args, binary: true } : { id, method, args }) + '\n';
     if (Buffer.byteLength(request) > MAX_REQUEST_BYTES) return Promise.reject(new Error('Request is too large.'));
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {

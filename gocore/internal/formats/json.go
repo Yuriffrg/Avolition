@@ -81,8 +81,9 @@ func appendValue(b []byte, value any) ([]byte, error) {
 	return append(b, encoded...), nil
 }
 
-// appendMesh writes one Mesh exactly as json.Marshal would.
-func appendMesh(b []byte, mesh *Mesh) ([]byte, error) {
+// appendMesh writes one Mesh exactly as json.Marshal would. With blobs, its
+// numeric arrays are binary blobs referenced by placeholders (see binary.go).
+func appendMesh(b []byte, mesh *Mesh, blobs *Blobs) ([]byte, error) {
 	if mesh == nil {
 		return append(b, "null"...), nil
 	}
@@ -102,17 +103,28 @@ func appendMesh(b []byte, mesh *Mesh) ([]byte, error) {
 		b = append(b, `,"`...)
 		b = append(b, field.key...)
 		b = append(b, `":`...)
-		if b, err = appendFloats(b, field.values, 32); err != nil {
+		if blobs != nil {
+			b = blobs.appendFloat32s(b, field.values)
+		} else if b, err = appendFloats(b, field.values, 32); err != nil {
 			return nil, err
 		}
 	}
-	b = append(b, `,"indices":`...)
-	b = appendUints(b, mesh.Indices)
-	b = append(b, `,"skinIndices":`...)
-	b = appendUints(b, mesh.SkinIndices)
-	b = append(b, `,"skinWeights":`...)
-	if b, err = appendFloats(b, mesh.SkinWeights, 64); err != nil {
-		return nil, err
+	if blobs != nil {
+		b = append(b, `,"indices":`...)
+		b = blobs.appendIndices(b, mesh.Indices)
+		b = append(b, `,"skinIndices":`...)
+		b = blobs.appendUint16s(b, mesh.SkinIndices)
+		b = append(b, `,"skinWeights":`...)
+		b = blobs.appendFloat64sAs32(b, mesh.SkinWeights)
+	} else {
+		b = append(b, `,"indices":`...)
+		b = appendUints(b, mesh.Indices)
+		b = append(b, `,"skinIndices":`...)
+		b = appendUints(b, mesh.SkinIndices)
+		b = append(b, `,"skinWeights":`...)
+		if b, err = appendFloats(b, mesh.SkinWeights, 64); err != nil {
+			return nil, err
+		}
 	}
 	if mesh.SourceMeshIndex != nil {
 		b = append(b, `,"sourceMeshIndex":`...)
@@ -139,7 +151,7 @@ func spliceKey(dst, encoded []byte, key string, raw func([]byte) ([]byte, error)
 	return append(dst, '}'), nil
 }
 
-func appendModel(b []byte, model *Model) ([]byte, error) {
+func appendModel(b []byte, model *Model, blobs *Blobs) ([]byte, error) {
 	if model == nil || model.Meshes == nil {
 		return appendValue(b, model)
 	}
@@ -156,7 +168,7 @@ func appendModel(b []byte, model *Model) ([]byte, error) {
 			if i > 0 {
 				b = append(b, ',')
 			}
-			if b, err = appendMesh(b, mesh); err != nil {
+			if b, err = appendMesh(b, mesh, blobs); err != nil {
 				return nil, err
 			}
 		}
@@ -195,11 +207,26 @@ func meshesSize(meshes []*Mesh) int {
 }
 
 // AppendAssetJSON appends the JSON encoding of asset to dst (see above).
-func AppendAssetJSON(dst []byte, asset *Asset) ([]byte, error) {
+func AppendAssetJSON(dst []byte, asset *Asset) ([]byte, error) { return appendAsset(dst, asset, nil) }
+
+// AppendAssetBinary is AppendAssetJSON with every mesh array replaced by a
+// placeholder for a blob added to blobs (see binary.go).
+func AppendAssetBinary(dst []byte, asset *Asset, blobs *Blobs) ([]byte, error) {
+	dst, err := appendAsset(dst, asset, blobs)
+	if err == nil {
+		err = blobs.Err()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return dst, nil
+}
+
+func appendAsset(dst []byte, asset *Asset, blobs *Blobs) ([]byte, error) {
 	if asset == nil {
 		return append(dst, "null"...), nil
 	}
-	if dst == nil {
+	if dst == nil && blobs == nil {
 		dst = make([]byte, 0, assetSize(asset))
 	}
 	shallow := *asset
@@ -222,7 +249,7 @@ func AppendAssetJSON(dst []byte, asset *Asset) ([]byte, error) {
 		if i > 0 {
 			dst = append(dst, ',')
 		}
-		if dst, err = appendModel(dst, model); err != nil {
+		if dst, err = appendModel(dst, model, blobs); err != nil {
 			return nil, err
 		}
 	}
@@ -233,14 +260,27 @@ func AppendAssetJSON(dst []byte, asset *Asset) ([]byte, error) {
 	}
 	// Compact map assets: append "meshPrototypes" before the closing brace.
 	// Prototypes hold nearly all of a map's numbers, so they are encoded in
-	// parallel into separate buffers and joined in order.
+	// parallel into separate buffers and joined in order. Blob placeholders
+	// are numbered in order and cost nothing to encode, so they are serial.
 	dst = append(dst[:len(dst)-1], `,"meshPrototypes":{`...)
 	ids := asset.MeshPrototypes.Keys()
+	if blobs != nil {
+		for i, id := range ids {
+			if i > 0 {
+				dst = append(dst, ',')
+			}
+			prototype, _ := asset.MeshPrototypes.Get(id)
+			if dst, err = appendPrototype(dst, id, prototype, blobs); err != nil {
+				return nil, err
+			}
+		}
+		return append(dst, "}}"...), nil
+	}
 	parts := make([][]byte, len(ids))
 	errs := make([]error, len(ids))
 	encode := func(i int) {
 		prototype, _ := asset.MeshPrototypes.Get(ids[i])
-		parts[i], errs[i] = appendPrototype(nil, ids[i], prototype)
+		parts[i], errs[i] = appendPrototype(nil, ids[i], prototype, nil)
 	}
 	workers := min(runtime.NumCPU(), len(ids))
 	if workers <= 1 {
@@ -274,8 +314,8 @@ func AppendAssetJSON(dst []byte, asset *Asset) ([]byte, error) {
 }
 
 // appendPrototype appends `"id":{"meshes":[...]}`.
-func appendPrototype(dst []byte, id string, prototype *MeshPrototype) ([]byte, error) {
-	if prototype != nil && cap(dst)-len(dst) < meshesSize(prototype.Meshes) {
+func appendPrototype(dst []byte, id string, prototype *MeshPrototype, blobs *Blobs) ([]byte, error) {
+	if prototype != nil && blobs == nil && cap(dst)-len(dst) < meshesSize(prototype.Meshes) {
 		dst = append(make([]byte, 0, len(dst)+len(id)+meshesSize(prototype.Meshes)+64), dst...)
 	}
 	dst, err := appendValue(dst, id)
@@ -291,7 +331,7 @@ func appendPrototype(dst []byte, id string, prototype *MeshPrototype) ([]byte, e
 		if i > 0 {
 			dst = append(dst, ',')
 		}
-		if dst, err = appendMesh(dst, mesh); err != nil {
+		if dst, err = appendMesh(dst, mesh, blobs); err != nil {
 			return nil, err
 		}
 	}
@@ -299,11 +339,26 @@ func appendPrototype(dst []byte, id string, prototype *MeshPrototype) ([]byte, e
 }
 
 // AppendClipJSON appends the JSON encoding of clip to dst.
-func AppendClipJSON(dst []byte, clip *Clip) ([]byte, error) {
+func AppendClipJSON(dst []byte, clip *Clip) ([]byte, error) { return appendClip(dst, clip, nil) }
+
+// AppendClipBinary is AppendClipJSON with every track's frames and values
+// replaced by placeholders for blobs added to blobs (see binary.go).
+func AppendClipBinary(dst []byte, clip *Clip, blobs *Blobs) ([]byte, error) {
+	dst, err := appendClip(dst, clip, blobs)
+	if err == nil {
+		err = blobs.Err()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return dst, nil
+}
+
+func appendClip(dst []byte, clip *Clip, blobs *Blobs) ([]byte, error) {
 	if clip == nil {
 		return append(dst, "null"...), nil
 	}
-	if dst == nil {
+	if dst == nil && blobs == nil {
 		size := 1024
 		for _, bone := range clip.Bones {
 			for _, track := range [...]*Track{bone.Positions, bone.Rotations, bone.Scales} {
@@ -346,10 +401,16 @@ func AppendClipJSON(dst []byte, clip *Clip) ([]byte, error) {
 				b = append(b, `,"`...)
 				b = append(b, field.key...)
 				b = append(b, `":{"frames":`...)
-				b = appendUints(b, field.track.Frames)
-				b = append(b, `,"values":`...)
-				if b, err = appendFloats(b, field.track.Values, 64); err != nil {
-					return nil, err
+				if blobs != nil {
+					b = blobs.appendUint32s(b, field.track.Frames)
+					b = append(b, `,"values":`...)
+					b = blobs.appendFloat64s(b, field.track.Values)
+				} else {
+					b = appendUints(b, field.track.Frames)
+					b = append(b, `,"values":`...)
+					if b, err = appendFloats(b, field.track.Values, 64); err != nil {
+						return nil, err
+					}
 				}
 				b = append(b, '}')
 			}

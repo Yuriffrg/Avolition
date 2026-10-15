@@ -47,6 +47,8 @@
 // computes in float64 (bones, matrices, skin weights, clip values) are
 // float64. AppendAssetJSON and AppendClipJSON encode the same objects without
 // reflecting over the bulk numeric arrays; prefer them for API replies.
+// AppendAssetBinary and AppendClipBinary write the same objects with those
+// arrays as binary blobs for hosts that negotiated binary frames (binary.go).
 //
 // Keys added after load_asset by other layers already exist on the structs
 // and stay absent until set: Model.MaterialLook/Materials (materials),

@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Transport benchmark</title>
+<script>
+// Times each request from the renderer until its reply is in the main world,
+// then until every mesh/track array is a typed array (JSON replies need the
+// conversion the viewer performs; binary replies already hold typed arrays).
+const TYPES = {positions: Float32Array, normals: Float32Array, uvs: Float32Array, uvs2: Float32Array,
+  indices: Uint32Array, skinIndices: Uint16Array, skinWeights: Float32Array, frames: Uint32Array, values: Float64Array};
+function typed(node) {
+  if (!node || typeof node !== 'object' || ArrayBuffer.isView(node)) return;
+  if (Array.isArray(node)) { for (const item of node) typed(item); return; }
+  for (const key in node) {
+    const item = node[key];
+    if (TYPES[key] && Array.isArray(item) && (!item.length || typeof item[0] === 'number')) node[key] = new TYPES[key](item);
+    else typed(item);
+  }
+}
+// Binary replies must reach the main world as typed arrays.
+const arrived = (method, data) => method === 'load_texture' ? data.png instanceof Uint8Array
+  : method === 'load_animation' ? data.bones.some(bone => bone.positions?.values instanceof Float64Array)
+  : [...data.models, ...Object.values(data.meshPrototypes || {})].some(model => model?.meshes?.[0]?.positions instanceof Float32Array);
+const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
+(async () => {
+  const params = new URLSearchParams(location.search);
+  const {entity, clip, map, mapRoot} = JSON.parse(params.get('cases'));
+  const reps = Number(params.get('reps'));
+  const rows = [];
+  let textures = [];
+  const measure = async (label, method, args) => {
+    for (const mode of ['json', 'binary']) {
+      const samples = [];
+      for (let rep = 0; rep < reps; rep++) {
+        const before = await window.bench.bytes(mode);
+        const start = performance.now();
+        const result = await window.bench.call(mode, method, args);
+        const reply = performance.now() - start;
+        if (!result.ok) throw new Error(`${method}: ${result.error}`);
+        if (mode === 'binary' && !arrived(method, result.data)) throw new Error(`${method}: no typed arrays arrived`);
+        typed(result.data);
+        samples.push({reply, typed: performance.now() - start, bytes: await window.bench.bytes(mode) - before});
+        if (method === 'load_entity') textures = Object.keys(result.data.textures || {});
+      }
+      rows.push({label, mode, ...Object.fromEntries(['reply', 'typed', 'bytes'].map(key => [key, median(samples.map(s => s[key]))]))});
+    }
+  };
+  try {
+    await measure('load_entity Big', 'load_entity', [entity]);
+    await measure('load_animation Big', 'load_animation', [clip]);
+    if (textures.length) await measure('load_texture 2048', 'load_texture', [textures[0], 2048]);
+    await measure('load_map Bench', 'load_map', [map, mapRoot]);
+    window.bench.done(rows);
+  } catch (error) { window.bench.error(String(error.stack || error)); }
+})();
+</script>

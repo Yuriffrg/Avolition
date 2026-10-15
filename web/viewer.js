@@ -3,6 +3,10 @@ import { PreviewOrbitControls } from './navigation.js';
 import { createPoseEvaluator } from './pose.js';
 import { MaterialLibrary } from './materials.js';
 
+// Binary core replies deliver mesh arrays as typed arrays, used without a
+// copy; JSON replies deliver number arrays.
+const attribute = (values, size, TypedArray) =>
+  new THREE.BufferAttribute(values instanceof TypedArray ? values : new TypedArray(values), size);
 const isTyping = target => target?.matches?.('input, textarea, select, [contenteditable="true"]');
 export const DEFAULT_VIEW_OPTIONS = Object.freeze({grid: true, skeleton: false, wireframe: false, lockRoot: false, textured: true});
 
@@ -314,16 +318,16 @@ export class PreviewViewport {
           const skinned = bones.length && data.skinIndices?.length && data.skinWeights?.length;
           if (!geometry) {
           geometry = new THREE.BufferGeometry();
-          geometry.setAttribute('position', new THREE.Float32BufferAttribute(data.positions, 3));
-          geometry.setIndex(data.indices);
-          if (data.normals?.length === data.positions.length) geometry.setAttribute('normal', new THREE.Float32BufferAttribute(data.normals, 3));
+          geometry.setAttribute('position', attribute(data.positions, 3, Float32Array));
+          geometry.setIndex(ArrayBuffer.isView(data.indices) ? new THREE.BufferAttribute(data.indices, 1) : data.indices);
+          if (data.normals?.length === data.positions.length) geometry.setAttribute('normal', attribute(data.normals, 3, Float32Array));
           else geometry.computeVertexNormals();
           const uvCount = data.positions.length / 3 * 2;
-          if (data.uvs?.length === uvCount) geometry.setAttribute('uv', new THREE.Float32BufferAttribute(data.uvs, 2));
-          if (data.uvs2?.length === uvCount) geometry.setAttribute('uv1', new THREE.Float32BufferAttribute(data.uvs2, 2));
+          if (data.uvs?.length === uvCount) geometry.setAttribute('uv', attribute(data.uvs, 2, Float32Array));
+          if (data.uvs2?.length === uvCount) geometry.setAttribute('uv1', attribute(data.uvs2, 2, Float32Array));
           if (skinned) {
-            geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(data.skinIndices, 4));
-            geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(data.skinWeights, 4));
+            geometry.setAttribute('skinIndex', attribute(data.skinIndices, 4, Uint16Array));
+            geometry.setAttribute('skinWeight', attribute(data.skinWeights, 4, Float32Array));
           }
           geometry.computeBoundingSphere();
           geometryCache.set(data.positions, geometry);

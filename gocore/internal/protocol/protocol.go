@@ -40,6 +40,9 @@ type Request struct {
 	ID     json.RawMessage
 	Method string
 	Args   []json.RawMessage
+	// Binary is "binary": true: the host accepts binary frames (see
+	// api/frames.go). app.py ignores the key.
+	Binary bool
 }
 
 // Failure is a request rejected before dispatch. A nil ID is sent as null.
@@ -86,7 +89,8 @@ func Parse(line []byte) (Request, *Failure) {
 			return Request{}, &Failure{ID: id, Message: "Expected an argument list"}
 		}
 	}
-	return Request{ID: id, Method: method, Args: args}, nil
+	binary := string(fields["binary"]) == "true"
+	return Request{ID: id, Method: method, Args: args, Binary: binary}, nil
 }
 
 // validID accepts a JSON string or an integer literal. Python's json module

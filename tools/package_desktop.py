@@ -57,7 +57,7 @@ def main():
     (target/'resources/default_app.asar').unlink(missing_ok=True)
     app = target/'resources/app'
     app.mkdir()
-    for name in ('main.cjs', 'preload.cjs', 'package.json'):
+    for name in ('main.cjs', 'frames.cjs', 'preload.cjs', 'package.json'):
         shutil.copy2(source/'desktop'/name, app/name)
     shutil.copytree(source/'web', target/'resources/web')
     if args.go_core:

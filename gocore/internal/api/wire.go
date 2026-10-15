@@ -87,7 +87,11 @@ func (t textureStore) Load(textureID, maxEdge any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return t.store.LoadJSON(rawID, rawEdge)
+	result, err := t.store.LoadJSON(rawID, rawEdge)
+	if err != nil {
+		return nil, err
+	}
+	return textureData{result}, nil
 }
 
 type duplicateIndex struct{ index *duplicates.Index }

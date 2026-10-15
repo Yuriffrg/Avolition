@@ -100,7 +100,9 @@ export class MaterialLibrary {
       this._reserve(0);
       const result = await this.resolveTexture(id);
       this._check();
-      if (!result || typeof result.dataUri !== 'string' || !result.dataUri.startsWith('data:image/png;base64,')) {
+      // Binary core replies carry the PNG bytes ("png"); JSON replies a data URI.
+      const png = result?.png instanceof Uint8Array ? result.png : null;
+      if (!result || !png && (typeof result.dataUri !== 'string' || !result.dataUri.startsWith('data:image/png;base64,'))) {
         throw new Error('A texture could not be decoded as a PNG preview.');
       }
       const width = Number(result.width), height = Number(result.height);
@@ -111,7 +113,10 @@ export class MaterialLibrary {
         throw new Error('Texture preview budget reached; remaining maps use a fallback.');
       }
       this.pixelCount += width * height;
-      const texture = await this.loadTexture(result.dataUri);
+      const url = png ? URL.createObjectURL(new Blob([png], {type: 'image/png'})) : result.dataUri;
+      let texture;
+      try { texture = await this.loadTexture(url); }
+      finally { if (png) URL.revokeObjectURL(url); }
       if (this.disposed) {
         texture.dispose();
         texture.image?.close?.();
