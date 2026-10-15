@@ -48,9 +48,12 @@ type ObjectNames interface {
 	Apply(asset *formats.Asset, names *ordered.Map[string]) (*formats.Asset, error)
 }
 
-// BridgeStatus is BridgeClient.status(): a dict with at least connected and
-// message.
-type BridgeStatus = *ordered.Map[any]
+// BridgeStatus is BridgeClient.status(); it encodes as the status dict.
+type BridgeStatus interface {
+	Connected() bool
+	Octane() bool
+	Message() string
+}
 
 // Bridge is c4d_bridge.BridgeClient.
 type Bridge interface {

@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"avolition/gocore/internal/formats"
 	"avolition/gocore/internal/ordered"
 	"avolition/gocore/internal/pycompat"
 	"avolition/gocore/internal/workflowpaths"
@@ -61,7 +62,7 @@ type API struct {
 	mu           sync.Mutex // BrowserAPI._lock
 	queueMu      sync.Mutex // _queue_activity_lock
 	queueRunning map[string]bool
-	naming       *ordered.Map[*namingAsset]
+	naming       *ordered.Map[*formats.Asset] // editable-name skeletons
 
 	previewMu         sync.Mutex // _entity_preview_lock
 	previewGeneration int
@@ -84,22 +85,6 @@ type API struct {
 	toolchain     Toolchain
 	datatool      DataTool
 	analysis      Analysis
-}
-
-// namingAsset is the editable-name skeleton kept per loaded asset.
-type namingAsset struct {
-	name   string
-	models []namingModel
-}
-
-type namingModel struct {
-	id, name string
-	meshes   []namingMesh
-}
-
-type namingMesh struct {
-	name            string
-	sourceMeshIndex int
 }
 
 func lookupEnv(name string) string {
@@ -146,7 +131,7 @@ func New(options Options) (*API, error) {
 	}
 	a := &API{
 		deps: deps, desktopMode: options.DesktopMode, lastPing: time.Now(),
-		queueRunning: map[string]bool{}, naming: ordered.New[*namingAsset](),
+		queueRunning: map[string]bool{}, naming: ordered.New[*formats.Asset](),
 	}
 	if deps.NewMapJobs != nil {
 		a.mapExports = deps.NewMapJobs()

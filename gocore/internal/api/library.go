@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"avolition/gocore/internal/formats"
+	"avolition/gocore/internal/libraryscan"
 	"avolition/gocore/internal/ordered"
 	"avolition/gocore/internal/pycompat"
 	"avolition/gocore/internal/pypath"
@@ -449,98 +450,6 @@ type scanResult struct {
 	Warnings           []string       `json:"warnings"`
 }
 
-// mapAssetFolders is library_scan.MAP_ASSET_FOLDERS.
-var mapAssetFolders = map[string]bool{"models": true, "entities": true, "effects": true, "textures": true,
-	"sound": true, "sounds": true, "voicesets": true, "animations": true, "materials": true, "modellooks": true}
-
-func hasMapMarker(files []string) bool {
-	for _, name := range files {
-		if strings.HasSuffix(pycompat.Casefold(name), ".owmap") {
-			return true
-		}
-	}
-	return false
-}
-
-// insideMapAssets is library_scan.inside_map_assets(path).
-func insideMapAssets(path string) bool {
-	child := path
-	for _, parent := range pypath.Parents(path) {
-		if mapAssetFolders[pycompat.Casefold(pycompat.Name(child))] {
-			if entries, err := readDirNames(parent); err == nil {
-				for _, entry := range entries {
-					if strings.HasSuffix(pycompat.Casefold(entry.Name()), ".owmap") && entryIsFile(parent, entry) {
-						return true
-					}
-				}
-			}
-			// Unreadable parent metadata is not evidence of map ownership.
-		}
-		child = parent
-	}
-	return false
-}
-
-func entryIsFile(parent string, entry os.DirEntry) bool {
-	if entry.Type()&os.ModeSymlink != 0 {
-		return pycompat.IsFile(pycompat.Join(parent, entry.Name()))
-	}
-	return entry.Type().IsRegular()
-}
-
-func readDirNames(dir string) ([]os.DirEntry, error) {
-	file, err := os.Open(dir)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	return file.ReadDir(-1)
-}
-
-type entitySortKey struct {
-	notEntity bool
-	priority  int
-	relative  string
-}
-
-// entitySortKeyOf is library_scan.entity_sort_key(item).
-func entitySortKeyOf(item *EntityEntry) entitySortKey {
-	entity := item.Kind == "entity"
-	relative := item.RelativePath
-	if relative == "" {
-		relative = item.Path
-	}
-	if relative == "" {
-		relative = item.Name
-	}
-	filename := item.Name
-	if filename == "" {
-		parts := strings.Split(strings.ReplaceAll(relative, `\`, "/"), "/")
-		filename = parts[len(parts)-1]
-	}
-	filename = pycompat.Casefold(filename)
-	priority := 2
-	if entity {
-		switch filename {
-		case "gameplay1p.owentity":
-			priority = 0
-		case "gameplay3p.owentity":
-			priority = 1
-		}
-	}
-	return entitySortKey{!entity, priority, pyLower(relative)}
-}
-
-func (k entitySortKey) less(o entitySortKey) bool {
-	if k.notEntity != o.notEntity {
-		return !k.notEntity
-	}
-	if k.priority != o.priority {
-		return k.priority < o.priority
-	}
-	return k.relative < o.relative
-}
-
 // setOfStrings is set(list) for a catalog list (unhashable items fail).
 func setOfStrings(list []any) (map[string]bool, error) {
 	set := make(map[string]bool, len(list))
@@ -639,12 +548,12 @@ func (a *API) ScanRoot(value, activate any) (any, error) {
 	}
 	// Map variants own their neighboring exported asset branches. Do not
 	// decode those thousands of model/clip dependencies as character assets.
-	if !insideMapAssets(path) {
+	if !libraryscan.InsideMapAssets(path) {
 		pypath.Walk(path, unreadable, func(parent string, dirs *[]string, files []string) bool {
-			mapExport := hasMapMarker(files)
+			mapExport := libraryscan.HasMapMarker(files)
 			kept := (*dirs)[:0]
 			for _, d := range *dirs {
-				if d == ".git" || d == "__pycache__" || (mapExport && mapAssetFolders[pycompat.Casefold(d)]) {
+				if d == ".git" || d == "__pycache__" || (mapExport && libraryscan.IsMapAssetFolder(d)) {
 					continue
 				}
 				if len(outputDirectories) > 0 && outputDirectories[key(pycompat.Join(parent, d))] {
@@ -693,7 +602,9 @@ func (a *API) ScanRoot(value, activate any) (any, error) {
 			return count <= 250000
 		})
 	}
-	sort.SliceStable(entities, func(i, j int) bool { return entitySortKeyOf(entities[i]).less(entitySortKeyOf(entities[j])) })
+	libraryscan.SortEntities(entities, func(e *EntityEntry) libraryscan.Item {
+		return libraryscan.Item{Kind: e.Kind, RelativePath: e.RelativePath, Path: e.Path, Name: e.Name}
+	})
 	paths := make([]string, len(entities))
 	for i, item := range entities {
 		paths[i] = item.Path
