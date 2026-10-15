@@ -31,6 +31,10 @@ c4d-plugin/ + owpreview/c4d_bridge.py, c4d_scene.py, c4d_octane.py
   turns them into typed arrays (`desktop/frames.cjs`). Every other reply is a
   plain JSON line. The Python core ignores `binary` and answers in JSON, and
   the renderer accepts both arrays and typed arrays.
+- **Ordering:** requests are handled in arrival order, except that consecutive
+  `load_texture` calls run in parallel (`concurrent` in
+  `gocore/internal/api/stdio.go`); any other request waits for them first.
+  Only add a method there if it reads shared state and never changes it.
 
 ## Making a change
 
