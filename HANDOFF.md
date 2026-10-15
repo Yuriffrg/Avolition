@@ -28,6 +28,10 @@ Files outside `gocore/` that changed:
   JSON.
 - `web/viewer.js`, `web/materials.js`: accept typed arrays and PNG bytes
   (still accept plain arrays and data URIs).
+  `web/viewer.js` also asks for the high-performance GPU and compiles each new
+  material's shader in the background before first use (avoids frame stalls,
+  which ANGLE on Windows makes long); `web/materials.js` keeps up to one
+  texture request per CPU core in flight (4–8, was 4).
 - `build.ps1`, `tools/package_desktop.py`: Go build by default, ship
   `frames.cjs`, no Python runtime or Python license files in a Go build.
 - `licenses/GO-LICENSE.txt`, `GOLANG-X-IMAGE-LICENSE.txt`,

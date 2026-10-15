@@ -41,11 +41,17 @@ export function mapPreviewMaterialOptions(asset) {
   return {maxTextures:views.size, maxPixels, textureEdge:Math.max(32, Math.min(512, edge)), maxAnisotropy:1};
 }
 
+// The core decodes textures on every CPU core, so keep up to one request per
+// core in flight (at least the previous 4, at most 8 to bound memory).
+function defaultConcurrency() {
+  return Math.min(8, Math.max(4, globalThis.navigator?.hardwareConcurrency || 4));
+}
+
 /** Owns every texture/material created for one loaded entity. */
 export class MaterialLibrary {
   constructor(resolveTexture, {
     loadTexture = uri => new THREE.TextureLoader().loadAsync(uri),
-    maxTextures = 128, maxPixels = 64_000_000, concurrency = 4, maxAnisotropy = 1,
+    maxTextures = 128, maxPixels = 64_000_000, concurrency = defaultConcurrency(), maxAnisotropy = 1,
   } = {}) {
     this.resolveTexture = resolveTexture;
     this.loadTexture = loadTexture;

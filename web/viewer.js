@@ -440,6 +440,8 @@ export class PreviewViewport {
         throw error;
       }
       if (!current() || !result) return;
+      await this._precompile(result.material, binding.mesh);
+      if (!current()) return;
       binding.textured = result.material;
       result.material.polygonOffset = this.options.wireframe;
       binding.mesh.material = this.options.textured ? result.material : binding.neutral;
@@ -450,6 +452,21 @@ export class PreviewViewport {
     const warnings = library.warnings;
     if (this._environmentWarning && applied) warnings.push(this._environmentWarning);
     return current() ? {applied, texturedMeshes, warnings} : cancelled();
+  }
+
+  // Compile a material's shader in the background before it is first drawn.
+  // Otherwise the first frame that uses each new material variant blocks while
+  // the GPU driver compiles it (slow with ANGLE on Windows). One compile per
+  // material; renderers without compileAsync just skip this.
+  _precompile(material, mesh) {
+    if (!this.renderer?.compileAsync) return Promise.resolve();
+    this._compiled ||= new WeakMap();
+    if (!this._compiled.has(material)) {
+      const probe = mesh.isSkinnedMesh ? new THREE.SkinnedMesh(mesh.geometry, material) : new THREE.Mesh(mesh.geometry, material);
+      if (mesh.isSkinnedMesh) probe.bind(mesh.skeleton, mesh.bindMatrix);
+      this._compiled.set(material, this.renderer.compileAsync(probe, this.camera, this.scene).catch(() => {}));
+    }
+    return this._compiled.get(material);
   }
 
   getRigs() {
