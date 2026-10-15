@@ -38,7 +38,7 @@ func lerp(e0, e1, w int32) int32 { return ((64-w)*e0 + w*e1 + 32) >> 6 }
 //
 // The index comes from projecting the pixel on the line (the palette lies on
 // it up to rounding), so each pixel costs one projection and one error.
-func assignLine(block *pixels, e0, e1 *[4]int32, c0, c1 int, weights []int32, nearest *[65]uint8) (indices [16]uint8, err int32) {
+func assignLine(block [][4]uint8, e0, e1 *[4]int32, c0, c1 int, weights []int32, nearest *[65]uint8) (indices [16]uint8, err int32) {
 	var mask [4]int32
 	for c := c0; c < c1; c++ {
 		mask[c] = 1
@@ -68,7 +68,7 @@ func assignLine(block *pixels, e0, e1 *[4]int32, c0, c1 int, weights []int32, ne
 
 // fitLine solves for the endpoints of channels [c0, c1) that best fit the
 // pixels with the given indices (least squares).
-func fitLine(block *pixels, indices *[16]uint8, c0, c1 int, weights []int32) (e0, e1 [4]float32, ok bool) {
+func fitLine(block [][4]uint8, indices *[16]uint8, c0, c1 int, weights []int32) (e0, e1 [4]float32, ok bool) {
 	var aa, bb, ab float32
 	var ax, bx [4]float32
 	for i, px := range block {
@@ -95,7 +95,7 @@ func fitLine(block *pixels, indices *[16]uint8, c0, c1 int, weights []int32) (e0
 
 // lineEnds returns the extreme points of the block's projection on its
 // principal axis over channels [0, n).
-func lineEnds(block *pixels, n int) (e0, e1 [4]float32) {
+func lineEnds(block [][4]uint8, n int) (e0, e1 [4]float32) {
 	mean, axis := principalAxis(block, n)
 	lo, hi := float32(math.MaxFloat32), float32(-math.MaxFloat32)
 	for _, px := range block {
@@ -117,11 +117,14 @@ func lineEnds(block *pixels, n int) (e0, e1 [4]float32) {
 
 // quantizeP quantizes an RGBA endpoint to 7 bits per channel plus a shared
 // p-bit (mode 6), choosing the p-bit with less error.
-func quantizeP(e [4]float32) (q [4]int32, p int32, decoded [4]int32) {
+//
+// With ignoreAlpha the p-bit only minimises the RGB error (alpha may decode
+// as 254 instead of 255); otherwise fully opaque and fully transparent
+// endpoints keep their exact alpha.
+func quantizeP(e [4]float32, ignoreAlpha bool) (q [4]int32, p int32, decoded [4]int32) {
 	bestErr := float32(math.MaxFloat32)
 	for bit := range int32(2) {
-		// Keep fully opaque and fully transparent endpoints exact.
-		if bit == 0 && e[3] >= 254.5 || bit == 1 && e[3] <= 0.5 {
+		if !ignoreAlpha && (bit == 0 && e[3] >= 254.5 || bit == 1 && e[3] <= 0.5) {
 			continue
 		}
 		var cq, cd [4]int32
@@ -130,8 +133,10 @@ func quantizeP(e [4]float32) (q [4]int32, p int32, decoded [4]int32) {
 			v := int32((e[c]-float32(bit))/2 + 0.5)
 			v = min(max(v, 0), 127)
 			cq[c], cd[c] = v, v<<1|bit
-			d := float32(cd[c]) - e[c]
-			err += d * d
+			if c < 3 || !ignoreAlpha {
+				d := float32(cd[c]) - e[c]
+				err += d * d
+			}
 		}
 		if err < bestErr {
 			bestErr, q, p, decoded = err, cq, bit, cd
@@ -160,26 +165,45 @@ type mode6 struct {
 	p0, p1  int32
 	indices [16]uint8
 	err     int32
+	d0, d1  [4]int32 // decoded endpoints
 }
 
-func encodeMode6(block *pixels) mode6 {
-	e0, e1 := lineEnds(block, 4)
+// worst is the largest error of one pixel.
+func (m *mode6) worst(block *pixels) int32 {
+	var worst int32
+	for i, px := range block {
+		w := weights4[m.indices[i]]
+		var e int32
+		for c := range 4 {
+			e += sq(int32(px[c]) - lerp(m.d0[c], m.d1[c], w))
+		}
+		worst = max(worst, e)
+	}
+	return worst
+}
+
+func encodeMode6(block *pixels, ignoreAlpha bool) mode6 {
+	channels := 4
+	if ignoreAlpha {
+		channels = 3
+	}
+	e0, e1 := lineEnds(block[:], 4)
 	best := mode6{err: math.MaxInt32}
 	for pass := range 2 {
-		q0, p0, d0 := quantizeP(e0)
-		q1, p1, d1 := quantizeP(e1)
-		indices, err := assignLine(block, &d0, &d1, 0, 4, weights4, &nearest4)
+		q0, p0, d0 := quantizeP(e0, ignoreAlpha)
+		q1, p1, d1 := quantizeP(e1, ignoreAlpha)
+		indices, err := assignLine(block[:], &d0, &d1, 0, channels, weights4, &nearest4)
 		if err >= best.err {
 			break
 		}
-		best = mode6{q0, q1, p0, p1, indices, err}
+		best = mode6{q0, q1, p0, p1, indices, err, d0, d1}
 		// One least-squares refinement, unless the block already fits to
 		// about one level per pixel.
 		if pass == 1 || err <= 16 {
 			break
 		}
 		var ok bool
-		if e0, e1, ok = fitLine(block, &indices, 0, 4, weights4); !ok {
+		if e0, e1, ok = fitLine(block[:], &indices, 0, 4, weights4); !ok {
 			break
 		}
 	}
@@ -217,17 +241,17 @@ type mode5 struct {
 
 func encodeMode5(block *pixels) mode5 {
 	m := mode5{colorErr: math.MaxInt32}
-	e0, e1 := lineEnds(block, 3)
+	e0, e1 := lineEnds(block[:], 3)
 	for range 2 {
 		q0, d0 := quantize7(e0)
 		q1, d1 := quantize7(e1)
-		indices, err := assignLine(block, &d0, &d1, 0, 3, weights2, &nearest2)
+		indices, err := assignLine(block[:], &d0, &d1, 0, 3, weights2, &nearest2)
 		if err >= m.colorErr {
 			break
 		}
 		m.q0, m.q1, m.color, m.colorErr = q0, q1, indices, err
 		var ok bool
-		if e0, e1, ok = fitLine(block, &indices, 0, 3, weights2); !ok {
+		if e0, e1, ok = fitLine(block[:], &indices, 0, 3, weights2); !ok {
 			break
 		}
 	}
@@ -240,12 +264,12 @@ func encodeMode5(block *pixels) mode5 {
 	for range 2 {
 		d0 := [4]int32{3: int32(a0 + 0.5)}
 		d1 := [4]int32{3: int32(a1 + 0.5)}
-		indices, err := assignLine(block, &d0, &d1, 3, 4, weights2, &nearest2)
+		indices, err := assignLine(block[:], &d0, &d1, 3, 4, weights2, &nearest2)
 		if err >= m.aErr {
 			break
 		}
 		m.a0, m.a1, m.alpha, m.aErr = d0[3], d1[3], indices, err
-		f0, f1, ok := fitLine(block, &indices, 3, 4, weights2)
+		f0, f1, ok := fitLine(block[:], &indices, 3, 4, weights2)
 		if !ok {
 			break
 		}
@@ -288,8 +312,9 @@ func (m *mode5) write(dst []byte) {
 }
 
 // encodeBC7 writes one BC7 block (16 bytes).
-func encodeBC7(dst []byte, block *pixels) {
-	m6 := encodeMode6(block)
+// ignoreAlpha is EncodeOpaque.
+func encodeBC7(dst []byte, block *pixels, ignoreAlpha bool) {
+	m6 := encodeMode6(block, ignoreAlpha)
 	alpha := block[0][3]
 	varies := false
 	for _, px := range block[1:] {
@@ -301,6 +326,21 @@ func encodeBC7(dst []byte, block *pixels) {
 	if varies && m6.err > 0 {
 		if m5 := encodeMode5(block); m5.colorErr+m5.aErr < m6.err {
 			m5.write(dst)
+			return
+		}
+	}
+	// Opaque blocks with a pixel that one line fits poorly (an edge between
+	// colours, not noise) try two subsets.
+	if !varies && alpha == 255 && m6.err > mode1Threshold && (m6.err > 4*mode1Threshold || m6.worst(block) > mode1Threshold) {
+		var best mode1
+		best.err = math.MaxInt32
+		for _, partition := range closestPartitions(splitBlock(block)) {
+			if m1 := encodeMode1(block, partition); m1.err < best.err {
+				best = m1
+			}
+		}
+		if best.err < m6.err {
+			best.write(dst)
 			return
 		}
 	}

@@ -41,6 +41,60 @@ export function mapPreviewMaterialOptions(asset) {
   return {maxTextures:views.size, maxPixels, textureEdge:Math.max(32, Math.min(512, edge)), maxAnisotropy:1};
 }
 
+// GPU block formats the core can send instead of PNGs (binary replies only):
+// [three.js format, bytes per 4×4 block]. BC1/BC3 need the sRGB S3TC
+// extension too, because colour maps are sampled as sRGB.
+const BLOCK_FORMATS = Object.freeze({
+  bc7: [THREE.RGBA_BPTC_Format, 16], bc3: [THREE.RGBA_S3TC_DXT5_Format, 16], bc1: [THREE.RGB_S3TC_DXT1_Format, 8],
+});
+
+/** The block formats renderer can sample, in the core's preference order. */
+export function compressedTextureFormats(renderer) {
+  const has = name => { try { return Boolean(renderer?.extensions?.has(name)); } catch { return false; } };
+  const formats = [];
+  if (has('EXT_texture_compression_bptc')) formats.push('bc7');
+  if (has('WEBGL_compressed_texture_s3tc') && has('WEBGL_compressed_texture_s3tc_srgb')) formats.push('bc3', 'bc1');
+  return formats;
+}
+
+// The host keeps one list of accepted formats for every later load_texture
+// (window.pywebview.setTextureFormats; hosts without it, such as the Python
+// core's test server, always send PNGs). null detects the renderer's formats;
+// a list (e.g. [] for PNG only) overrides that, for comparisons.
+let formatPreference = null;
+let negotiated = null;
+export function setTextureFormatPreference(formats = null) { formatPreference = formats; }
+
+function negotiateFormats(renderer) {
+  const host = globalThis.window?.pywebview?.setTextureFormats;
+  if (typeof host !== 'function' || !renderer) return Promise.resolve([]);
+  const formats = (formatPreference ?? compressedTextureFormats(renderer)).filter(format => Object.hasOwn(BLOCK_FORMATS, format));
+  const key = formats.join(',');
+  if (negotiated?.key !== key) {
+    negotiated = {key, promise: Promise.resolve().then(() => host(formats)).then(() => formats, () => [])};
+  }
+  return negotiated.promise;
+}
+
+// Builds a mipmapped CompressedTexture from a compressed load_texture reply,
+// or throws when the reply is malformed. Its rows are already bottom to top.
+function compressedTexture(result, width, height) {
+  const [format, blockBytes] = Object.hasOwn(BLOCK_FORMATS, result.format) ? BLOCK_FORMATS[result.format] : [];
+  const mips = Array.isArray(result.mips) ? result.mips : [];
+  const valid = format !== undefined && mips.length > 0 && mips.every((mip, level) => mip
+    && mip.width === Math.max(1, width >> level) && mip.height === Math.max(1, height >> level)
+    && mip.data instanceof Uint8Array
+    && mip.data.byteLength === Math.ceil(mip.width / 4) * Math.ceil(mip.height / 4) * blockBytes);
+  if (!valid) throw new Error('A compressed texture preview is malformed.');
+  const texture = new THREE.CompressedTexture(
+    mips.map(({data, width, height}) => ({data, width, height})), width, height, format);
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  texture.flipY = false;
+  return texture;
+}
+
 // The core decodes textures on every CPU core, so keep up to one request per
 // core in flight (at least the previous 4, at most 8 to bound memory).
 function defaultConcurrency() {
@@ -52,8 +106,11 @@ export class MaterialLibrary {
   constructor(resolveTexture, {
     loadTexture = uri => new THREE.TextureLoader().loadAsync(uri),
     maxTextures = 128, maxPixels = 64_000_000, concurrency = defaultConcurrency(), maxAnisotropy = 1,
+    renderer = null,
   } = {}) {
     this.resolveTexture = resolveTexture;
+    // Ask the host for GPU block-compressed replies the renderer can use.
+    this.formats = negotiateFormats(renderer);
     this.loadTexture = loadTexture;
     this.maxTextures = Math.max(0, maxTextures);
     this.maxPixels = Math.max(0, maxPixels);
@@ -104,11 +161,15 @@ export class MaterialLibrary {
   _source(id) {
     if (!this.sources.has(id)) this.sources.set(id, this._limited(async () => {
       this._reserve(0);
+      await this.formats;
+      this._check();
       const result = await this.resolveTexture(id);
       this._check();
-      // Binary core replies carry the PNG bytes ("png"); JSON replies a data URI.
+      // Binary core replies carry the PNG bytes ("png") or, when negotiated,
+      // block-compressed mips ("format", "mips"); JSON replies a data URI.
+      const compressed = typeof result?.format === 'string';
       const png = result?.png instanceof Uint8Array ? result.png : null;
-      if (!result || !png && (typeof result.dataUri !== 'string' || !result.dataUri.startsWith('data:image/png;base64,'))) {
+      if (!result || !compressed && !png && (typeof result.dataUri !== 'string' || !result.dataUri.startsWith('data:image/png;base64,'))) {
         throw new Error('A texture could not be decoded as a PNG preview.');
       }
       const width = Number(result.width), height = Number(result.height);
@@ -119,10 +180,13 @@ export class MaterialLibrary {
         throw new Error('Texture preview budget reached; remaining maps use a fallback.');
       }
       this.pixelCount += width * height;
-      const url = png ? URL.createObjectURL(new Blob([png], {type: 'image/png'})) : result.dataUri;
       let texture;
-      try { texture = await this.loadTexture(url); }
-      finally { if (png) URL.revokeObjectURL(url); }
+      if (compressed) texture = compressedTexture(result, width, height);
+      else {
+        const url = png ? URL.createObjectURL(new Blob([png], {type: 'image/png'})) : result.dataUri;
+        try { texture = await this.loadTexture(url); }
+        finally { if (png) URL.revokeObjectURL(url); }
+      }
       if (this.disposed) {
         texture.dispose();
         texture.image?.close?.();
@@ -158,7 +222,8 @@ export class MaterialLibrary {
       texture.colorSpace = colorSpace;
       texture.channel = uvIndex;
       // Exported .owmdl UVs already contain the exporter's V conversion.
-      texture.flipY = true;
+      // Compressed uploads cannot flip; the core sends their rows flipped.
+      texture.flipY = !texture.isCompressedTexture;
       texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
       texture.repeat.set(...repeat);
       texture.anisotropy = this.maxAnisotropy;

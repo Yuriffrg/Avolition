@@ -161,7 +161,7 @@ func encodeColor(dst []byte, block *pixels, fourOnly bool) {
 		writeColor(dst, c0, c1, &indices)
 		return
 	}
-	mean, axis := principalAxis(block, 3)
+	mean, axis := principalAxis(block[:], 3)
 	if axis == [4]float32{} {
 		axis = [4]float32{0.57735, 0.57735, 0.57735}
 	}

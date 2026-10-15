@@ -421,7 +421,7 @@ export class PreviewViewport {
     }
     this.invalidate();
     const library = new MaterialLibrary(resolveTexture, {
-      maxAnisotropy: this.renderer?.capabilities.getMaxAnisotropy() || 1,
+      maxAnisotropy: this.renderer?.capabilities.getMaxAnisotropy() || 1, renderer: this.renderer,
       ...libraryOptions,
     });
     this._materialLibrary = library;

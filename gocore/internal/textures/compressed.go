@@ -110,8 +110,12 @@ func (s *Store) LoadCompressed(textureID string, maxEdge int, accepted string) (
 	levels := bcenc.MipChain(pix, source.Width, source.Height, srgb)
 	result := &Result{Width: source.Width, Height: source.Height, Warning: warning, Format: format,
 		Mips: make([]Mip, len(levels))}
+	encode := bcenc.Encode
+	if !hasAlpha {
+		encode = bcenc.EncodeOpaque // keeps black and white exact
+	}
 	for i, level := range levels {
-		result.Mips[i] = Mip{level.Width, level.Height, bcenc.Encode(format, level.Pix, level.Width, level.Height)}
+		result.Mips[i] = Mip{level.Width, level.Height, encode(format, level.Pix, level.Width, level.Height)}
 	}
 	return s.storeResult(key, result, generation), nil
 }

@@ -156,6 +156,13 @@ func TestBlockEncodersSimpleBlocks(t *testing.T) {
 				t.Fatalf("%s: checker not exact: %v", format, decoded.Pix[:16])
 			}
 		}
+		// EncodeOpaque keeps the colours exact instead (alpha 254 or 255).
+		decoded = decodeFormat(t, format, bcenc.EncodeOpaque(format, image.Pix, 8, 8), 8, 8)
+		for i := range decoded.Pix {
+			if i%4 != 3 && decoded.Pix[i] != image.Pix[i] || i%4 == 3 && decoded.Pix[i] < 254 {
+				t.Fatalf("%s opaque: checker not exact: %v", format, decoded.Pix[:16])
+			}
+		}
 	}
 }
 

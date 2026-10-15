@@ -67,6 +67,18 @@ func fetch(dst *pixels, pix []byte, width, height, bx, by int) {
 // into format's blocks, left to right and top to bottom. It panics on an
 // unknown format.
 func Encode(format string, pix []byte, width, height int) []byte {
+	return encode(format, pix, width, height, false)
+}
+
+// EncodeOpaque is Encode for an image whose alpha is all 255 and unused: BC7
+// may then decode alpha as 254 where that keeps the colour exact (BC7 mode 6
+// shares one low bit between colour and alpha, so exact opaque alpha would
+// turn black into 1/255).
+func EncodeOpaque(format string, pix []byte, width, height int) []byte {
+	return encode(format, pix, width, height, true)
+}
+
+func encode(format string, pix []byte, width, height int, ignoreAlpha bool) []byte {
 	blockSize := BlockBytes(format)
 	if blockSize == 0 {
 		panic("bcenc: unknown format " + format)
@@ -88,7 +100,7 @@ func Encode(format string, pix []byte, width, height int) []byte {
 				encodeAlpha(dst[:8], &block, 3)
 				encodeColor(dst[8:], &block, true)
 			case BC7:
-				encodeBC7(dst, &block)
+				encodeBC7(dst, &block, ignoreAlpha)
 			}
 		}
 	}
@@ -159,7 +171,7 @@ func clampF(v, lo, hi float32) float32 {
 // principalAxis returns the block's mean and the dominant direction of its
 // first n channels (power iteration on the covariance matrix); the axis is
 // zero when the block is flat.
-func principalAxis(block *pixels, n int) (mean, axis [4]float32) {
+func principalAxis(block [][4]uint8, n int) (mean, axis [4]float32) {
 	var sum [4]int32
 	var products [10]int32 // upper triangle of Σ p pᵀ
 	lo, hi := [4]int32{255, 255, 255, 255}, [4]int32{}
@@ -186,8 +198,8 @@ func principalAxis(block *pixels, n int) (mean, axis [4]float32) {
 	k := 0
 	for i := range 4 {
 		for j := i; j < 4; j++ {
-			// 16·Σ(p-mean)(p-mean)ᵀ, exact in integers.
-			c := float32(16*products[k] - sum[i]*sum[j])
+			// N·Σ(p-mean)(p-mean)ᵀ, exact in integers.
+			c := float32(int32(len(block))*products[k] - sum[i]*sum[j])
 			cov[i][j], cov[j][i] = c, c
 			k++
 		}
@@ -197,7 +209,7 @@ func principalAxis(block *pixels, n int) (mean, axis [4]float32) {
 	var v [4]float32
 	widest := 0
 	for c := range n {
-		mean[c] = float32(sum[c]) / 16
+		mean[c] = float32(sum[c]) / float32(len(block))
 		v[c] = float32(hi[c] - lo[c])
 		if cov[c][c] > cov[widest][widest] {
 			widest = c
