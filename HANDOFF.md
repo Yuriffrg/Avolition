@@ -196,6 +196,36 @@ PNG and the BC7 and BC1 paths and compares them at full size and minified
 upload speed, driver acceptance of non-power-of-two compressed sizes, and
 visual quality on real Overwatch textures.
 
+## Batched map rendering
+
+Static map scenes (`PreviewViewport._staticScene`) no longer draw one mesh per
+placement. `web/map-batching.js` draws placements that share geometry and the
+material currently shown as one `THREE.InstancedMesh`; wire overlays batch the
+same way. The per-placement meshes stay in the scene graph as the source of
+truth (object tree, visibility, renaming, framing, texture loading); their own
+draw is switched off with an empty layer mask. `sync()` (on invalidated
+frames) follows material/visibility changes, `cull()` (every rendered frame)
+keeps per-instance frustum culling. Mirrored placements batch separately with a
+mirrored batch matrix (same front-face flip as before); transparent and skinned
+meshes still draw themselves; animating a map dissolves the batches.
+Characters are untouched. Test: `tests/test_map_batching.mjs`.
+
+`gocore/bench/render_map.cjs` on the benchmark map (3,600 placements, 300
+props, textured), headless Chromium with SwiftShader, so draw calls are exact
+and times only indicative (rasterising 11M triangles in software takes ~24 s a
+frame and hides the GPU-side gain):
+
+| | before | after |
+|---|---:|---:|
+| Draw calls, overview | 3,601 | 301 |
+| Draw calls, close view | 64 | 57 |
+| Triangles (overview / close) | 10.95M / 192k | 10.95M / 192k |
+| `renderer.render()` CPU time per orbit frame | 34.8 ms | 14.4 ms |
+| JS heap after textures | 31.3 MB | 33.4 MB |
+
+Screenshots from the same camera: close view identical (max 2/255); overview
+0.004% of pixels differ (max 33/255, instance order at depth ties).
+
 ## Not verified here (needs a Windows machine)
 
 Everything was built and run on Linux; the Windows build compiles but was not
