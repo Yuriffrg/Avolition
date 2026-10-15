@@ -196,6 +196,73 @@ PNG and the BC7 and BC1 paths and compares them at full size and minified
 upload speed, driver acceptance of non-power-of-two compressed sizes, and
 visual quality on real Overwatch textures.
 
+## If something breaks
+
+Start with the log: `%LOCALAPPDATA%\Avolition\desktop\avolition.log`. The
+host writes the core's stderr there (`core: ...` lines), plus renderer console
+messages. The fastest way to isolate a problem is to switch one change off at a
+time:
+
+| Switch | Effect |
+|---|---|
+| `AVOLITION_BINARY_ARRAYS=0` | host asks for plain JSON replies (no binary frames) |
+| `AVOLITION_COMPRESSED_TEXTURES=0` | PNG textures instead of BC7/BC1/BC3 |
+| `AVOLITION_BACKEND_PATH=<path>` | run a different `owio-core.exe`, e.g. a `build.ps1 -PythonCore` build of 0.8.22's backend, to see whether a bug is the Go port or something else |
+
+Likely failure points, why, and where to look:
+
+- **"The local importer stopped" at launch / blank window.** The Go core
+  exited. Run `resources\backend\owio-core.exe --self-test report.json` in a
+  terminal to see the error. Code: `gocore/cmd/owio-core/main.go`,
+  `gocore/internal/api/api.go` (`New`: catalog loading and migration).
+- **Saved labels, export list or settings missing after updating.**
+  `catalog.json` reading/migration (`gocore/internal/api/api.go`, tests in
+  `migration_test.go`). The file format is unchanged; compare with what 0.8.22
+  wrote.
+- **A model/map/clip fails to load, or loads differently than in 0.8.22.**
+  Parsers in `gocore/internal/formats`, `materials`, `mapformats`. Error texts
+  match Python's, so search the message in `owpreview/*.py` to find the
+  matching Go function. To confirm a port bug: run
+  `python bench/difftest.py <owio-core.exe> <export folder>` from `gocore/`
+  (it needs Python with NumPy and Pillow); it lists every reply that differs
+  from the Python core.
+- **Paths: "file not found", wrong library root, UNC paths, odd drive-letter
+  case, symlinks/junctions.** Python's `pathlib` behaviour is emulated in
+  `gocore/internal/pycompat` and `pypath`. These were only tested on Linux;
+  Windows path resolution is the most likely place for differences.
+- **Mesh loads but looks garbled, or the window freezes on large assets.**
+  Binary frames: Go writer `gocore/internal/api/frames.go` +
+  `formats/binary.go`, host reader `desktop/frames.cjs`, renderer use in
+  `web/viewer.js`. Try `AVOLITION_BINARY_ARRAYS=0`; if that fixes it, the bug
+  is in the frame path.
+- **Textures black, wrong colours, upside down or missing.** Try
+  `AVOLITION_COMPRESSED_TEXTURES=0`. If PNG works, look at
+  `gocore/internal/bcenc` (encoder, row flip, mips), the format choice in
+  `web/materials.js`, and driver support (non-power-of-two compressed sizes are
+  the least tested case). If PNG is also wrong: `gocore/internal/textures`
+  (decoders and channel maths; JPEG is the one format not bit-identical to
+  0.8.22).
+- **Textures load slowly on the user's PC.** The BC7 encode runs on the CPU in
+  the core; on a weak CPU PNG may be faster. Measure with the switch above.
+- **Wrong texture on a mesh after quickly switching assets.** Texture loads
+  now run in parallel (`concurrent` in `gocore/internal/api/stdio.go`) and
+  replies can arrive out of order; the host matches them by id. Check the
+  texture store's register/release handling in `gocore/internal/textures`.
+- **Toolchain / DataTool: extraction won't start, Cancel leaves processes
+  running, or "access denied".** Windows job objects and suspended process
+  start in `gocore/internal/datatool/*_windows.go`. This code was compiled for
+  Windows but never run.
+- **Cinema 4D export fails or the scene is wrong.** The Go side writes the
+  same payload JSON into the same mailbox (`gocore/internal/c4dbridge`,
+  `c4dexport`, `mapexport`); the companion plugin is unchanged Python. Compare
+  a payload from the Go core with one from a `-PythonCore` build.
+- **Baked textures get `_2` names in an existing export folder.** Expected:
+  Go's PNG bytes differ from Pillow's even when pixels are identical, so the
+  publisher treats them as different files.
+- **Build fails.** `build.ps1` now needs Go 1.24 on PATH (it calls
+  `go build` in `gocore/`); Python is still needed for
+  `tools/package_desktop.py`. `-PythonCore` builds the old backend.
+
 ## Not verified here (needs a Windows machine)
 
 Everything was built and run on Linux; the Windows build compiles but was not
