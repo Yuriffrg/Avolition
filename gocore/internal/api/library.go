@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"regexp"
@@ -373,38 +374,57 @@ type ClipEntry struct {
 	DuplicateError *string
 }
 
-// MarshalJSON writes the keys in Python's insertion order.
+// clipJSON and clipErrorJSON are the two key orders of a ClipEntry.
+type clipJSON struct {
+	Name            string  `json:"name"`
+	Path            string  `json:"path"`
+	FPS             float64 `json:"fps"`
+	DurationFrames  int64   `json:"durationFrames"`
+	LastFrame       int64   `json:"lastFrame"`
+	DurationSeconds float64 `json:"durationSeconds"`
+	BoneCount       int     `json:"boneCount"`
+	Size            int64   `json:"size"`
+	Version         string  `json:"version"`
+	clipTail
+}
+
+type clipErrorJSON struct {
+	Path            string `json:"path"`
+	Name            string `json:"name"`
+	Size            int64  `json:"size"`
+	FPS             int    `json:"fps"`
+	DurationFrames  int    `json:"durationFrames"`
+	DurationSeconds int    `json:"durationSeconds"`
+	BoneCount       int    `json:"boneCount"`
+	Error           string `json:"error"`
+	clipTail
+}
+
+type clipTail struct {
+	RelativePath   string  `json:"relativePath"`
+	Annotation     any     `json:"annotation"`
+	DuplicateKey   string  `json:"duplicateKey"`
+	DuplicateCount int     `json:"duplicateCount"`
+	DuplicateError *string `json:"duplicateError,omitempty"`
+}
+
+// MarshalJSON writes the keys in Python's insertion order (structs rather
+// than an ordered.Map: scan_root encodes thousands of clips).
 func (c *ClipEntry) MarshalJSON() ([]byte, error) {
-	out := ordered.New[any]()
-	if c.Header != nil {
-		h := c.Header
-		out.Set("name", h.Name)
-		out.Set("path", h.Path)
-		out.Set("fps", h.FPS)
-		out.Set("durationFrames", h.DurationFrames)
-		out.Set("lastFrame", h.LastFrame)
-		out.Set("durationSeconds", h.DurationSeconds)
-		out.Set("boneCount", h.BoneCount)
-		out.Set("size", h.Size)
-		out.Set("version", h.Version)
+	tail := clipTail{c.RelativePath, c.Annotation, c.DuplicateKey, c.DuplicateCount, c.DuplicateError}
+	var value any
+	if h := c.Header; h != nil {
+		value = &clipJSON{h.Name, h.Path, h.FPS, h.DurationFrames, h.LastFrame, h.DurationSeconds, h.BoneCount, h.Size, h.Version, tail}
 	} else {
-		out.Set("path", c.Path)
-		out.Set("name", c.Name)
-		out.Set("size", c.Size)
-		out.Set("fps", 0)
-		out.Set("durationFrames", 0)
-		out.Set("durationSeconds", 0)
-		out.Set("boneCount", 0)
-		out.Set("error", c.ErrorText)
+		value = &clipErrorJSON{Path: c.Path, Name: c.Name, Size: c.Size, Error: c.ErrorText, clipTail: tail}
 	}
-	out.Set("relativePath", c.RelativePath)
-	out.Set("annotation", c.Annotation)
-	out.Set("duplicateKey", c.DuplicateKey)
-	out.Set("duplicateCount", c.DuplicateCount)
-	if c.DuplicateError != nil {
-		out.Set("duplicateError", *c.DuplicateError)
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false) // as ordered.Map: Python does not escape <, > and &
+	if err := encoder.Encode(value); err != nil {
+		return nil, err
 	}
-	return out.MarshalJSON()
+	return bytes.TrimRight(buffer.Bytes(), "\n"), nil
 }
 
 // FilePath is clip['path'].
