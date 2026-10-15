@@ -171,9 +171,10 @@ type Material struct {
 }
 
 // MaterialMap binds a material role to a texture (materials.py add_map).
-// Path, RelativePath and Source are added by export_textures.
+// Path, RelativePath and Source are added by export_textures, whose baked
+// maps have no textureId (registered maps always have a non-empty one).
 type MaterialMap struct {
-	TextureID    string     `json:"textureId"`
+	TextureID    string     `json:"textureId,omitempty"`
 	UVIndex      int        `json:"uvIndex"`
 	ColorSpace   string     `json:"colorSpace"`
 	Repeat       [2]float64 `json:"repeat"`
