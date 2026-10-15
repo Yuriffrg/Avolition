@@ -61,7 +61,7 @@ export class PreviewViewport {
     this.scene.background = new THREE.Color('#111115');
     this.camera = new THREE.PerspectiveCamera(38, 1, 0.01, 10000);
     this.camera.position.set(3.5, 2.5, 4.5);
-    this.renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: false});
+    this.renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: false, powerPreference: 'high-performance'});
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
