@@ -130,12 +130,26 @@ for r in requests:
     except Exception as e:
         out.append({'error': str(e)})
 result = out`, folder, specs, requests)
-	var want []struct {
-		Result
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal(result.MustValue(t), &want); err != nil {
+	var replies []json.RawMessage
+	if err := json.Unmarshal(result.MustValue(t), &replies); err != nil {
 		t.Fatal(err)
+	}
+	want := make([]struct {
+		Result
+		Error string
+	}, len(replies))
+	for i, reply := range replies {
+		var failure struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(reply, &failure); err != nil {
+			t.Fatal(err)
+		}
+		if want[i].Error = failure.Error; failure.Error == "" {
+			if err := json.Unmarshal(reply, &want[i].Result); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 	store := NewStore()
 	store.Register(specs, "")

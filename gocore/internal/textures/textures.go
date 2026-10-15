@@ -10,11 +10,13 @@ package textures
 import (
 	"bytes"
 	"container/list"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -53,12 +55,65 @@ var (
 	maxPreviewEdge  = MaxPreviewEdge // tests lower it, as Python's tests patch MAX_PREVIEW_EDGE
 )
 
-// Result is load_texture's reply.
+// Result is load_texture's reply. The store keeps the PNG file; its JSON
+// form carries it as a "dataUri" (base64), produced only when encoded, while
+// binary replies send the bytes as they are.
 type Result struct {
-	DataURI string `json:"dataUri"`
-	Width   int    `json:"width"`
-	Height  int    `json:"height"`
-	Warning string `json:"warning,omitempty"`
+	PNG     []byte
+	Width   int
+	Height  int
+	Warning string
+}
+
+// DataURI is "data:image/png;base64,..." for the PNG.
+func (r *Result) DataURI() string {
+	return string(r.appendDataURI(make([]byte, 0, len(dataURIPrefix)+base64.StdEncoding.EncodedLen(len(r.PNG)))))
+}
+
+func (r *Result) appendDataURI(dst []byte) []byte {
+	dst = append(dst, dataURIPrefix...)
+	return base64.StdEncoding.AppendEncode(dst, r.PNG)
+}
+
+// AppendJSON appends {"dataUri": ..., "width": ..., "height": ...[,
+// "warning": ...]}, as json.dumps writes the Python reply.
+func (r *Result) AppendJSON(dst []byte) []byte {
+	dst = append(dst, `{"dataUri":"`...)
+	dst = r.appendDataURI(dst) // base64 needs no escaping
+	dst = append(dst, `","width":`...)
+	dst = strconv.AppendInt(dst, int64(r.Width), 10)
+	dst = append(dst, `,"height":`...)
+	dst = strconv.AppendInt(dst, int64(r.Height), 10)
+	if r.Warning != "" {
+		dst = append(dst, `,"warning":`...)
+		var buffer bytes.Buffer
+		encoder := json.NewEncoder(&buffer)
+		encoder.SetEscapeHTML(false) // Python does not escape <, > and &
+		_ = encoder.Encode(r.Warning)
+		dst = append(dst, bytes.TrimRight(buffer.Bytes(), "\n")...)
+	}
+	return append(dst, '}')
+}
+
+func (r *Result) MarshalJSON() ([]byte, error) { return r.AppendJSON(nil), nil }
+
+// UnmarshalJSON reads the JSON form (tests compare with Python's replies).
+func (r *Result) UnmarshalJSON(data []byte) error {
+	var reply struct {
+		DataURI string `json:"dataUri"`
+		Width   int    `json:"width"`
+		Height  int    `json:"height"`
+		Warning string `json:"warning"`
+	}
+	if err := json.Unmarshal(data, &reply); err != nil {
+		return err
+	}
+	png, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(reply.DataURI, dataURIPrefix))
+	if err != nil {
+		return err
+	}
+	*r = Result{png, reply.Width, reply.Height, reply.Warning}
+	return nil
 }
 
 type imageKey struct {
@@ -168,7 +223,7 @@ func (s *Store) pruneUnownedCache(previous map[string]Spec) {
 		if old, had := previous[entry.key.id]; !ok || !had || old != current {
 			s.results.Remove(element)
 			delete(s.resultIndex, entry.key)
-			s.resultBytes -= len(entry.result.DataURI)
+			s.resultBytes -= len(entry.result.PNG)
 		}
 		element = next
 	}
@@ -301,16 +356,16 @@ func (s *Store) Load(textureID string, maxEdge int) (*Result, error) {
 	if s.generation != generation {
 		return result, nil
 	}
-	for s.results.Len() > 0 && s.resultBytes+len(result.DataURI) > CacheBytes {
+	for s.results.Len() > 0 && s.resultBytes+len(result.PNG) > CacheBytes {
 		oldest := s.results.Front()
 		entry := oldest.Value.(*resultEntry)
 		s.results.Remove(oldest)
 		delete(s.resultIndex, entry.key)
-		s.resultBytes -= len(entry.result.DataURI)
+		s.resultBytes -= len(entry.result.PNG)
 	}
-	if len(result.DataURI) <= CacheBytes {
+	if len(result.PNG) <= CacheBytes {
 		s.resultIndex[key] = s.results.PushBack(&resultEntry{key, result})
-		s.resultBytes += len(result.DataURI)
+		s.resultBytes += len(result.PNG)
 	}
 	return result, nil
 }
@@ -385,17 +440,17 @@ func (s *Store) render(path string, maxEdge int, generation uint64, channels int
 		return nil, err
 	}
 	if entry := s.cachedImage(key); entry != nil {
-		uri, _ := dataURI(previewRows(entry.image, channels, convert, nil))
-		return &Result{DataURI: uri, Width: entry.image.Width, Height: entry.image.Height, Warning: entry.warning}, nil
+		png, _ := encodePNG(previewRows(entry.image, channels, convert, nil))
+		return &Result{PNG: png, Width: entry.image.Width, Height: entry.image.Height, Warning: entry.warning}, nil
 	}
 	stream := newImageStream()
 	go func() {
 		rgba, warning, err := loadImage(resolved, maxEdge, stream.progress)
 		stream.finish(rgba, warning, err)
 	}()
-	var uri string
+	var png []byte
 	if partial := stream.waitImage(); partial != nil {
-		uri, _ = dataURI(previewRows(partial, channels, convert, stream.waitRows))
+		png, _ = encodePNG(previewRows(partial, channels, convert, stream.waitRows))
 	}
 	rgba, warning, err := stream.result()
 	if err != nil {
@@ -403,11 +458,11 @@ func (s *Store) render(path string, maxEdge int, generation uint64, channels int
 	}
 	// The image is complete: encode it if it was not published while
 	// decoding (a reduced source) or is not the one encoded.
-	if uri == "" || stream.partial != rgba {
-		uri, _ = dataURI(previewRows(rgba, channels, convert, nil))
+	if png == nil || stream.partial != rgba {
+		png, _ = encodePNG(previewRows(rgba, channels, convert, nil))
 	}
 	s.storeImage(key, rgba, warning, generation)
-	return &Result{DataURI: uri, Width: rgba.Width, Height: rgba.Height, Warning: warning}, nil
+	return &Result{PNG: png, Width: rgba.Width, Height: rgba.Height, Warning: warning}, nil
 }
 
 // previewRows is the preview of an RGBA source: convert applied to each row

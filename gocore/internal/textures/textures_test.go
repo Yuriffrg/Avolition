@@ -44,7 +44,7 @@ func writePNG(t testing.TB, path string, width, height int, fill color.NRGBA, op
 // unpack decodes a data URI to RGBA bytes.
 func unpack(t testing.TB, result *Result) *Image {
 	t.Helper()
-	data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(result.DataURI, dataURIPrefix))
+	data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(result.DataURI(), dataURIPrefix))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestModelBrowserReplacementAndReleasePreserveSceneOwnersAndCaches(t *testin
 	if store.imageBytes != 2*2*4*2 {
 		t.Fatalf("image bytes %d", store.imageBytes)
 	}
-	if store.resultBytes != len(animation.DataURI)+len(mapImage.DataURI)+len(shared.DataURI) {
+	if store.resultBytes != len(animation.PNG)+len(mapImage.PNG)+len(shared.PNG) {
 		t.Fatalf("result bytes %d", store.resultBytes)
 	}
 	if err := store.Release("other"); err == nil || err.Error() != "Unknown texture workspace." {

@@ -1,10 +1,8 @@
 package api
 
 import (
-	"encoding/base64"
 	"io"
 	"strconv"
-	"strings"
 
 	"avolition/gocore/internal/formats"
 	"avolition/gocore/internal/textures"
@@ -110,21 +108,12 @@ func frameSize(blobs *formats.Blobs) int {
 // of the bytes and the renderer's base64 decoding.
 type textureData struct{ result *textures.Result }
 
-func (d textureData) AppendJSON(dst []byte) ([]byte, error) { return appendValue(dst, d.result) }
-
-const pngDataURIPrefix = "data:image/png;base64,"
+func (d textureData) AppendJSON(dst []byte) ([]byte, error) { return d.result.AppendJSON(dst), nil }
 
 func (d textureData) AppendBinary(dst []byte, blobs *formats.Blobs) ([]byte, error) {
 	result := d.result
-	if result == nil || !strings.HasPrefix(result.DataURI, pngDataURIPrefix) {
-		return d.AppendJSON(dst)
-	}
-	png, err := base64.StdEncoding.DecodeString(result.DataURI[len(pngDataURIPrefix):])
-	if err != nil {
-		return d.AppendJSON(dst)
-	}
 	dst = append(dst, `{"png":`...)
-	dst = blobs.Add(dst, formats.BlobUint8, png)
+	dst = blobs.Add(dst, formats.BlobUint8, result.PNG)
 	dst = append(dst, `,"width":`...)
 	dst = strconv.AppendInt(dst, int64(result.Width), 10)
 	dst = append(dst, `,"height":`...)

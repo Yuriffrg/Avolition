@@ -3,14 +3,12 @@ package textures
 import (
 	"bytes"
 	"compress/flate"
-	"encoding/base64"
 	"encoding/binary"
 	"hash/adler32"
 	"hash/crc32"
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"unsafe"
 )
 
 // PNG encoding for preview data URIs. The image is split into horizontal
@@ -362,20 +360,4 @@ func adler32Combine(adler1, adler2 uint32, length2 int) uint32 {
 const dataURIPrefix = "data:image/png;base64,"
 
 // DataURI encodes the image as "data:image/png;base64,...".
-func DataURI(image *Image) string {
-	uri, _ := dataURI(imageRows(image, 1))
-	return uri
-}
-
-// dataURI encodes source as a PNG data URI; false when source.wait fails.
-func dataURI(source rowSource) (string, bool) {
-	encoded, ok := encodePNG(source)
-	if !ok {
-		return "", false
-	}
-	buffer := make([]byte, len(dataURIPrefix)+base64.StdEncoding.EncodedLen(len(encoded)))
-	copy(buffer, dataURIPrefix)
-	base64.StdEncoding.Encode(buffer[len(dataURIPrefix):], encoded)
-	// The buffer is never modified again; avoid copying several megabytes.
-	return unsafe.String(unsafe.SliceData(buffer), len(buffer)), true
-}
+func DataURI(image *Image) string { return (&Result{PNG: EncodePNG(image)}).DataURI() }

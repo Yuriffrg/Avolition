@@ -97,7 +97,7 @@ func BenchmarkLoad(b *testing.B) {
 			perOp := b.Elapsed().Seconds() / float64(b.N)
 			b.ReportMetric(python.Seconds*1e3, "python-ms")
 			b.ReportMetric(python.Seconds/perOp, "speedup")
-			b.ReportMetric(float64(len(result.DataURI))/float64(python.Bytes), "size-vs-python")
+			b.ReportMetric(float64(len(result.DataURI()))/float64(python.Bytes), "size-vs-python")
 		})
 	}
 }

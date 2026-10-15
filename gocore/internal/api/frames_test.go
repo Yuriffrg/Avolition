@@ -139,7 +139,7 @@ func sameData(t *testing.T, path string, binary, plain any) {
 			t.Fatalf("%s: %T vs %T", path, binary, plain)
 		}
 		if png, isPNG := b["png"].(blobValue); isPNG {
-			if png.kind != "u8" || p["dataUri"] != pngDataURIPrefix+base64.StdEncoding.EncodeToString(png.raw) {
+			if png.kind != "u8" || p["dataUri"] != "data:image/png;base64,"+base64.StdEncoding.EncodeToString(png.raw) {
 				t.Fatalf("%s: png blob differs from dataUri", path)
 			}
 			b = map[string]any{"width": b["width"], "height": b["height"], "warning": b["warning"]}

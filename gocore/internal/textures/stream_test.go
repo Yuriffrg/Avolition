@@ -61,7 +61,7 @@ func TestStreamedLoadMatchesSequentialPipeline(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got := decodeURI(t, result.DataURI)
+			got := decodeURI(t, result.DataURI())
 			if result.Width != want.Width || result.Height != want.Height || result.Warning != warning {
 				t.Fatalf("%+v edge %d: %dx%d %q, want %dx%d %q", spec, edge, result.Width, result.Height, result.Warning, want.Width, want.Height, warning)
 			}
