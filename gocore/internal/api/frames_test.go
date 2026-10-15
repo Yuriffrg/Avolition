@@ -205,23 +205,34 @@ func TestStdioBinaryFramesMatchJSONReplies(t *testing.T) {
 	if err := a.ServeStdio(strings.NewReader(input.String()), &output); err != nil {
 		t.Fatal(err)
 	}
+	// Texture loads may finish in any order (the host matches replies by
+	// id), so collect every reply first.
 	reader := bufio.NewReader(bytes.NewReader(output.Bytes()))
 	offset := 0
-	for i, pair := range pairs {
-		plain, n, isFrame := readFrame(t, reader, offset)
+	type received struct {
+		reply   map[string]any
+		isFrame bool
+	}
+	byID := map[string]received{}
+	for offset < output.Len() {
+		reply, n, isFrame := readFrame(t, reader, offset)
 		offset += n
-		if isFrame {
+		id, _ := json.Marshal(reply["id"])
+		byID[string(id)] = received{reply, isFrame}
+	}
+	for i, pair := range pairs {
+		key := func(r map[string]any) string { id, _ := json.Marshal(r["id"]); return string(id) }
+		plain, framed := byID[key(pair[0])], byID[key(pair[1])]
+		if plain.reply == nil || framed.reply == nil {
+			t.Fatalf("%s: missing reply", pair[0]["method"])
+		}
+		if plain.isFrame {
 			t.Fatalf("%s: JSON request got a frame", pair[0]["method"])
 		}
-		framed, n, isFrame := readFrame(t, reader, offset)
-		offset += n
-		if wantFrame := i < 3; isFrame != wantFrame {
-			t.Fatalf("%s: frame %v, want %v", pair[1]["method"], isFrame, wantFrame)
+		if wantFrame := i < 3; framed.isFrame != wantFrame {
+			t.Fatalf("%s: frame %v, want %v", pair[1]["method"], framed.isFrame, wantFrame)
 		}
-		if !jsonEqual(t, framed["id"], pair[1]["id"]) {
-			t.Fatalf("id %v", framed["id"])
-		}
-		sameData(t, pair[0]["method"].(string), framed["result"], plain["result"])
+		sameData(t, pair[0]["method"].(string), framed.reply["result"], plain.reply["result"])
 	}
 	if offset != output.Len() {
 		t.Fatalf("read %d of %d bytes", offset, output.Len())

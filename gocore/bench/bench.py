@@ -38,7 +38,8 @@ def tree_rss_mb(pid):
 
 
 class Core:
-    def __init__(self, command, data_dir, app_dir):
+    def __init__(self, command, data_dir, app_dir, binary=False):
+        self.binary = binary
         self.started = time.perf_counter()
         self.process = subprocess.Popen(command + ['--stdio', '--data-dir', data_dir, '--app-dir', app_dir],
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -59,14 +60,21 @@ class Core:
         self.next_id += 1
         self.window_peak = 0.0
         start = time.perf_counter()
-        self.process.stdin.write(json.dumps({'id': self.next_id, 'method': method, 'args': list(args)}).encode() + b'\n')
+        request = {'id': self.next_id, 'method': method, 'args': list(args)}
+        if self.binary:
+            request['binary'] = True  # ask for binary frames, as desktop/main.cjs does
+        self.process.stdin.write(json.dumps(request).encode() + b'\n')
         self.process.stdin.flush()
         line = self.process.stdout.readline()
-        elapsed = time.perf_counter() - start
         reply = json.loads(line)
+        size = len(line)
+        for _, length in reply.get('blobs', []):  # a frame: raw blobs, each padded to 8 bytes
+            padded = (length + 7) // 8 * 8
+            size += len(self.process.stdout.read(padded))
+        elapsed = time.perf_counter() - start
         if not reply['result']['ok']:
             raise RuntimeError(f"{method} failed: {reply['result']['error']}")
-        return reply['result']['data'], elapsed, len(line)
+        return reply['result']['data'], elapsed, size
 
     def close(self):
         self.process.stdin.close()
@@ -96,12 +104,13 @@ def main():
     parser.add_argument('command', nargs='+')
     parser.add_argument('--label', default='core')
     parser.add_argument('--json')
+    parser.add_argument('--binary', action='store_true', help='request binary frames (Go core)')
     args = parser.parse_args()
     library = Path(args.library).resolve()
     app_dir = str(Path(__file__).resolve().parents[2])
     rows = []
     with tempfile.TemporaryDirectory() as data_dir:
-        core = Core(args.command, data_dir, app_dir)
+        core = Core(args.command, data_dir, app_dir, args.binary)
 
         def step(label, method, *call_args, repeat=1):
             total, size, peak = 0.0, 0, 0.0

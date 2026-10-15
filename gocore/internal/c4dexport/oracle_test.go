@@ -734,7 +734,8 @@ result = {'seconds': best, 'tracks': len(payload['animation']['tracks']),
 `
 
 func benchmarkInputs(t testing.TB) (entity, root, clipPath string) {
-	library := "/tmp/claude-0/-home-user-Avolition/e70be9b6-149e-503d-a8ec-7b456af224a1/scratchpad/lib/Heroes/Big/Skin0"
+	// The library from gocore/bench/make_library.py, when AVOLITION_BENCH_LIBRARY names it.
+	library := filepath.Join(os.Getenv("AVOLITION_BENCH_LIBRARY"), "Heroes", "Big", "Skin0")
 	if entities, _ := filepath.Glob(filepath.Join(library, "Entities", "*", "*.owentity")); len(entities) > 0 {
 		if clips, _ := filepath.Glob(filepath.Join(library, "Animations", "*.owanimclip")); len(clips) > 0 {
 			return entities[0], library, clips[0]

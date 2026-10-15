@@ -6,7 +6,7 @@ profile.
 
 Usage: difftest.py GO_BINARY [LIBRARY ...]
 Defaults to tests/demo-assets, tests/material-assets and the benchmark
-library when present. Exit status 1 when any reply differs.
+library named by AVOLITION_BENCH_LIBRARY, when set. Exit status 1 when any reply differs.
 """
 import base64
 import io
@@ -20,7 +20,8 @@ import tempfile
 import time
 
 REPO = Path(__file__).resolve().parents[2]
-BENCH = Path('/tmp/claude-0/-home-user-Avolition/e70be9b6-149e-503d-a8ec-7b456af224a1/scratchpad/lib')
+# The library from bench/make_library.py, when AVOLITION_BENCH_LIBRARY names it.
+BENCH = Path(os.environ.get('AVOLITION_BENCH_LIBRARY') or '/nonexistent')
 # Values that legitimately differ between two runs of the same core.
 IGNORED_KEYS = {'elapsedSeconds', 'checkedAt', 'startedAt', 'finishedAt', 'analyzedAt'}
 

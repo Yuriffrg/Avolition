@@ -1,7 +1,8 @@
 # Avolition Go core
 
-`owio-core` in Go. It replaces the Python core one method at a time, without
-changing the desktop shell or the web UI.
+`owio-core` in Go: the complete Avolition backend since 0.8.23. It replaced the
+Python core (`app.py` + `owpreview/`) behind the same `--stdio` protocol, so the
+desktop shell and renderer keep working unchanged with either core.
 
 ## How it works
 
@@ -74,58 +75,67 @@ final `catalog.json`. `bench/python-shim` lets the renderer tests
 (`tests/*_ui.cjs`, which start `<python> app.py --serve`) run against the Go
 core.
 
+## Packages
+
+One package per Python module (`PORTING.md` has the table), plus shared helpers:
+
+| Package | Role |
+|---|---|
+| `api` | `BrowserAPI`: every API method, `catalog.json`, export list, stdio loop, binary frames, `--serve`, `--self-test` |
+| `formats`, `materials`, `mapformats` | model/entity/clip/material/map readers and fast JSON / binary encoders |
+| `textures`, `exporttextures` | image decoders (PNG, DDS BC1–7, TGA, TIFF, JPEG, BMP, WebP), Pillow-exact channel maths and Lanczos resize, PNG encoder, baking |
+| `c4dexport`, `exportpose`, `fbx`, `exportbundle`, `mapexport`, `mapjobs`, `c4dbridge` | export payloads, pose maths, FBX writer, publishing, the Cinema 4D mailbox client |
+| `bonecounts`, `clipbindings`, `duplicates`, `libraryscan`, `objectnames`, `bonenames`, `evidence`, `analysis` | library scan helpers and animation analysis |
+| `datatool`, `toolchain`, `workflowpaths` | DataTool jobs (Windows job objects), Toolchain download/install, folders |
+| `pycompat`, `pyjson`, `pypath`, `ordered` | Python-compatible strings, `json.dumps`/`json.loads`, `pathlib` and ordered dicts |
+| `oracle`, `jsoncmp`, `formats/formatstest`, `mapformats/maptest`, `exporttest` | test helpers: call the Python reference, compare JSON, build fixtures |
+| `protocol` | request validation identical to `run_stdio` |
+
+`cmd/owio-core` is the backend executable; `cmd/analyze-library` replaces
+`tools/analyze_library.py`.
+
 ## Develop
 
 ```sh
 cd gocore
-go test ./...                       # includes end-to-end stdio/--serve/--self-test runs of the binary
-go build -o bin/owio-core ./cmd/owio-core
-python3 bench/difftest.py bin/owio-core     # Python vs Go, every reply and catalog.json
-# Renderer tests against the Go core (--serve):
+GOTOOLCHAIN=local go vet ./...
+GOTOOLCHAIN=local go test -short -race ./...   # unit, oracle (need python3 + numpy + Pillow; skip otherwise) and end-to-end tests
+GOOS=windows GOARCH=amd64 go build ./...
+go build -trimpath -ldflags "-s -w" -o bin/owio-core ./cmd/owio-core
+python3 bench/difftest.py $PWD/bin/owio-core   # Python vs Go: every reply and catalog.json
+# Renderer tests against the Go core (--serve); the shim runs the Go binary when a test starts app.py:
 PLAYWRIGHT_MODULE=$(npm root -g)/playwright WHITEHOUND_TEST_PYTHON=$PWD/bench/python-shim node ../tests/test_texture_ui.cjs
 ```
 
-The Python core is found in this order:
-
-1. `AVOLITION_PYTHON_CORE`: a frozen executable or a `.py` file.
-2. `python-core/owio-core(.exe)` beside the Go binary (the packaged layout).
-3. `app.py` in the binary's folder or up to three parent folders (a source
-   checkout).
-
-A `.py` core runs with `AVOLITION_PYTHON` (default `python` on Windows,
-`python3` elsewhere).
-
-To try it in the desktop shell from source:
+Run the desktop shell from source against the Go core:
 
 ```powershell
 cd gocore; go build -o bin\owio-core.exe .\cmd\owio-core
-$env:AVOLITION_BACKEND_PATH = "$PWD\bin\owio-core.exe"   # app.py is found two folders up
-cd ..\desktop; npm start
+$env:AVOLITION_BACKEND_PATH = "$PWD\bin\owio-core.exe"
+cd ..\desktop; npm install; npm start
 ```
 
-## Build the portable app with the Go core
+## Benchmarks
+
+`bench/make_library.py OUT` generates a 545 MB synthetic library (no game data):
+24 skins of 35k-vertex characters with 30 clips each, one 640k-vertex
+character with 2048² textures, and a 300-prop, 3,600-placement map. Set
+`AVOLITION_BENCH_LIBRARY=OUT` so `difftest.py` and the gated Go tests use it.
+
+- `bench/bench.py [--binary] [--label L] [--json F] LIBRARY -- CORE...`: time,
+  reply size and peak memory (core plus children) per API step over stdio.
+  Python core: `-- python3 -u app.py`; Go: `-- gocore/bin/owio-core`.
+- `bench/transport_stdio.cjs`, `bench/transport_electron/main.cjs`,
+  `bench/transport_renderer.cjs`: JSON versus binary frames through the host,
+  Electron IPC and the renderer.
+
+Results for 0.8.23 are in `../HANDOFF.md`.
+
+## Build the portable app
 
 ```powershell
-.\build.ps1 -ElectronArchive ...\electron-v44.4.3-win32-x64.zip -GoCore
+.\build.ps1 -ElectronArchive ...\electron-v44.4.3-win32-x64.zip
 ```
 
-This places the Go core at `resources/backend/owio-core.exe`; no frozen Python
-core is built or shipped (Python is used only by the packaging script).
-Without `-GoCore`, the build is unchanged.
-
-## Phase 1 measurements
-
-Measured on Linux in the development container with `tests/demo-assets`, over
-the real stdio protocol (best of three runs):
-
-| | Python only | Go core → Python |
-|---|---|---|
-| First reply after launch (`ping`) | ~115 ms | ~2 ms |
-| `bootstrap` ready | ~120 ms | ~120 ms (Python still starts) |
-| `ping` round trip | ~80 µs | ~70 µs |
-| `load_entity` (forwarded) | ~4.9 ms | ~5.1 ms (+ one pipe hop) |
-| Memory | 32.5 MB | 6.5 MB Go + 32.5 MB Python |
-
-Phase 1 is plumbing: until real work moves to Go, it adds ~6.5 MB and one pipe
-hop. The gains come as the parsers, texture decoding and scanning are ported,
-and Python ends up no longer being started at all.
+Go is the default backend: `resources/backend/owio-core.exe`, with no Python
+runtime shipped. `-PythonCore` builds the legacy PyInstaller backend instead.

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"runtime"
+	"sync"
 
 	"avolition/gocore/internal/formats"
 	"avolition/gocore/internal/protocol"
@@ -105,6 +107,10 @@ func (a *API) handle(dst []byte, line []byte) ([]byte, *formats.Blobs) {
 	if failure != nil {
 		return AppendReply(dst, failure.ID, nil, errors.New(failure.Message)), nil
 	}
+	return a.handleRequest(dst, request)
+}
+
+func (a *API) handleRequest(dst []byte, request protocol.Request) ([]byte, *formats.Blobs) {
 	args, err := DecodeArgs(request.Args)
 	if err != nil {
 		return AppendReply(dst, request.ID, nil, err), nil
@@ -124,12 +130,22 @@ func (a *API) handle(dst []byte, line []byte) ([]byte, *formats.Blobs) {
 	return appendFrameTail(dst, start, blobs), blobs
 }
 
+// concurrent lists methods that only read shared state, so consecutive calls
+// may run in parallel. The renderer requests several textures at once and the
+// host matches replies by id, so they may finish in any order. Every other
+// request first waits for these to finish, so it observes exactly the state
+// that run_stdio's strictly serial order would give it.
+var concurrent = map[string]bool{"load_texture": true}
+
 // ServeStdio is run_stdio: one JSON request per line in, one reply per line
-// out, strictly in order. Long-running work runs in background jobs polled
-// by status methods, so serial handling never blocks on them.
+// (or binary frame) out. Requests run in arrival order, except that a run of
+// consecutive load_texture calls is decoded in parallel. Long-running work
+// runs in background jobs polled by status methods.
 func (a *API) ServeStdio(in io.Reader, out io.Writer) error {
 	reader := bufio.NewReaderSize(in, 64*1024)
-	writer := bufio.NewWriterSize(out, 256*1024)
+	writer := &replyWriter{w: bufio.NewWriterSize(out, 256*1024)}
+	var inflight sync.WaitGroup
+	slots := make(chan struct{}, max(2, runtime.NumCPU()))
 	var buffer []byte
 	for {
 		line, readErr := reader.ReadBytes('\n')
@@ -140,28 +156,73 @@ func (a *API) ServeStdio(in io.Reader, out io.Writer) error {
 			}
 		}
 		if len(line) > 0 || readErr == nil {
-			var blobs *formats.Blobs
-			buffer, blobs = a.handle(buffer[:0], line)
-			if _, err := writer.Write(buffer); err != nil {
-				return err
-			}
-			if blobs != nil {
-				if err := writeBlobs(writer, blobs); err != nil {
-					return err
+			request, failure := protocol.Parse(line)
+			if failure == nil && concurrent[request.Method] {
+				slots <- struct{}{}
+				inflight.Add(1)
+				go func() {
+					defer func() { <-slots; inflight.Done() }()
+					reply, blobs := a.handleRequest(nil, request)
+					writer.send(reply, blobs)
+				}()
+			} else {
+				inflight.Wait()
+				var blobs *formats.Blobs
+				if failure != nil {
+					buffer = AppendReply(buffer[:0], failure.ID, nil, errors.New(failure.Message))
+				} else {
+					buffer, blobs = a.handleRequest(buffer[:0], request)
+				}
+				writer.send(buffer, blobs)
+				if cap(buffer) > 16<<20 {
+					buffer = nil // do not pin a huge mesh reply's buffer
 				}
 			}
-			if err := writer.Flush(); err != nil {
+			if err := writer.failed(); err != nil {
+				inflight.Wait()
 				return err
-			}
-			if cap(buffer) > 16<<20 {
-				buffer = nil // do not pin a huge mesh reply's buffer
 			}
 		}
 		if readErr != nil {
+			inflight.Wait()
+			if err := writer.failed(); err != nil {
+				return err
+			}
 			if errors.Is(readErr, io.EOF) {
 				return nil
 			}
 			return readErr
 		}
 	}
+}
+
+// replyWriter writes whole replies (a line plus any blobs) one at a time and
+// remembers the first write error.
+type replyWriter struct {
+	mu  sync.Mutex
+	w   *bufio.Writer
+	err error
+}
+
+func (r *replyWriter) send(reply []byte, blobs *formats.Blobs) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.err != nil {
+		return
+	}
+	if _, r.err = r.w.Write(reply); r.err != nil {
+		return
+	}
+	if blobs != nil {
+		if r.err = writeBlobs(r.w, blobs); r.err != nil {
+			return
+		}
+	}
+	r.err = r.w.Flush()
+}
+
+func (r *replyWriter) failed() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.err
 }

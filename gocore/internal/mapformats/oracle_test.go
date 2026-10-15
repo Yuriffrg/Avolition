@@ -417,11 +417,11 @@ func TestOracleScanMaps(t *testing.T) {
 }
 
 // The DataTool-layout benchmark map from gocore/bench/make_library.py, if
-// generated (AVOLITION_BENCH_MAP overrides its location).
+// generated under AVOLITION_BENCH_LIBRARY (AVOLITION_BENCH_MAP overrides its location).
 func benchMap() (path, root string) {
 	path = os.Getenv("AVOLITION_BENCH_MAP")
 	if path == "" {
-		path = "/tmp/claude-0/-home-user-Avolition/e70be9b6-149e-503d-a8ec-7b456af224a1/scratchpad/lib/Maps/Bench/Bench/Default/Bench.owmap"
+		path = filepath.Join(os.Getenv("AVOLITION_BENCH_LIBRARY"), "Maps", "Bench", "Bench", "Default", "Bench.owmap")
 	}
 	root = os.Getenv("AVOLITION_BENCH_MAP_ROOT")
 	if root == "" {

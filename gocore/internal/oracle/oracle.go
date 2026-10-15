@@ -47,10 +47,10 @@ func Available() error {
 // Result is the oracle's reply. On failure Error and Type describe the raised
 // Python exception, so tests can compare error messages too.
 type Result struct {
-	OK     bool            `json:"ok"`
-	Value  json.RawMessage `json:"result"`
-	Error  string          `json:"error"`
-	Type   string          `json:"type"`
+	OK    bool            `json:"ok"`
+	Value json.RawMessage `json:"result"`
+	Error string          `json:"error"`
+	Type  string          `json:"type"`
 }
 
 // Call runs module:function(*args) in Python, e.g. "owpreview.formats:load_asset".

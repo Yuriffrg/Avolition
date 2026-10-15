@@ -1,7 +1,9 @@
-# Avolition 0.8.22 — Export Manager
+# Avolition 0.8.23 — Go backend
 
 
 Avolition, previously Whitehound, is a standalone Windows application for exporting and browsing Overwatch models, maps and animations. Load an entity or model once, click clips to preview them, and collect named setups in a persistent export list. Open exported maps in their own workspace and export static scenes to Cinema 4D.
+
+Version 0.8.23 replaces the Python backend with a Go backend (`gocore/`). The interface, saved settings, export list, file formats and Cinema 4D bridge are unchanged; the Go core answers every request the same way the Python core did, verified by replaying identical requests through both. Loading is much faster and lighter: on a large synthetic library the heaviest character (640k vertices) loads in about 0.25 s instead of 5.6 s, a 3,600-placement map in about 0.3 s instead of 3.5 s, startup takes about 5 ms instead of 110–170 ms, and peak backend memory drops from about 930 MB to about 200 MB. Meshes, animations and textures now travel to the window as binary data instead of JSON text. The portable folder no longer contains a Python runtime. See [HANDOFF.md](HANDOFF.md) for the full change list and measurements.
 
 Version 0.8.22 moves the export control to a blue **Export Manager** button between **Clip details** and **Preview objects** in the Animations sidebar. It opens the existing export list and settings. The sliders icon beside Animation setup is removed.
 
@@ -244,48 +246,51 @@ For a separate test catalog, launch with `--data-dir "C:\path\to\test-data"` or 
 
 ## Source development
 
-The source distribution includes the Python backend, the Electron shell in `desktop`, the viewer in `web`, and regression fixtures in `tests`. The portable application already bundles these runtimes; the following development tools are needed only when running or building from source.
+The source distribution includes the Go backend in `gocore`, the Electron shell in `desktop`, the viewer in `web`, the Cinema 4D companion in `c4d-plugin`, and regression fixtures in `tests`. The Python backend (`app.py`, `owpreview`) remains as the reference implementation that the Go tests compare against; the companion's `owpreview/c4d_bridge.py`, `c4d_scene.py` and `c4d_octane.py` still run inside Cinema 4D. Coding agents should start with [AGENTS.md](AGENTS.md); the port itself is described in [HANDOFF.md](HANDOFF.md) and [gocore/README.md](gocore/README.md).
 
-The desktop shell uses Electron **44.4.3** and the backend uses **Pillow 12.3.0** to decode textures and **NumPy 2.3.5** for export transform calculations. Both are included in the portable application. Once the backend has been built, its source shell can be started with Node.js/npm:
+The desktop shell uses Electron **44.4.3**; the backend needs **Go 1.24** to build. Build the backend and start the source shell with Node.js/npm:
 
 ```powershell
-$env:AVOLITION_BACKEND_PATH = "C:\path\to\owio-core.exe"
-Set-Location desktop
+Set-Location gocore
+go build -trimpath -ldflags "-s -w" -o bin\owio-core.exe .\cmd\owio-core
+$env:AVOLITION_BACKEND_PATH = "$PWD\bin\owio-core.exe"
+Set-Location ..\desktop
 npm install
 npm start
 ```
 
-The shell uses the source tree's adjacent `web` folder during development. The packaged layout places the shell in `resources/app`, web assets in `resources/web`, and `owio-core.exe` with its `_internal` folder in `resources/backend`. `AVOLITION_BACKEND_PATH` is preferred; `WHITEHOUND_BACKEND_PATH` and `OWIO_BACKEND_PATH` remain fallback aliases. The internal `whitehound://app` protocol is unchanged for compatibility.
+The shell uses the source tree's adjacent `web` folder during development. The packaged layout places the shell in `resources/app`, web assets in `resources/web`, and `owio-core.exe` in `resources/backend`. `AVOLITION_BACKEND_PATH` is preferred; `WHITEHOUND_BACKEND_PATH` and `OWIO_BACKEND_PATH` remain fallback aliases. `AVOLITION_BINARY_ARRAYS=0` makes the shell request plain JSON replies. The internal `whitehound://app` protocol is unchanged for compatibility.
 
-To build the portable Windows folder, use a dedicated 64-bit Python environment and the official Electron 44.4.3 Windows x64 archive, `electron-v44.4.3-win32-x64.zip`. Put the release's `SHASUMS256.txt` beside that archive; the builder verifies its checksum. Use a fresh build-output directory:
+To build the portable Windows folder, install Go 1.24 (on PATH) and a 64-bit Python with PyInstaller (used only by the packaging script to stamp the icon and version), and download the official Electron 44.4.3 Windows x64 archive, `electron-v44.4.3-win32-x64.zip`. Put the release's `SHASUMS256.txt` beside that archive; the builder verifies its checksum. Use a fresh build-output directory:
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-build.txt
+.\.venv\Scripts\python.exe -m pip install pyinstaller==6.22.3
 .\build.ps1 `
   -Python .\.venv\Scripts\python.exe `
   -ElectronArchive "C:\downloads\electron-v44.4.3-win32-x64.zip" `
   -BuildRoot ".\build-output"
 ```
 
-This produces `build-output\dist\Avolition\Avolition.exe`. Distribute the entire `Avolition` folder, including its support files and license notices. The build script uses the supplied Electron archive and installed Python dependencies; it does not install missing build dependencies automatically.
+This produces `build-output\dist\Avolition\Avolition.exe`. Distribute the entire `Avolition` folder, including its support files and license notices. The build script uses the supplied Electron archive and installed tools; it does not install missing build dependencies automatically.
 
-The script also accepts `-DependencyPath "C:\path\to\python-libs"` for an isolated Python dependency directory. Add `-CheckOnly` to validate build inputs and dependencies without producing an executable. Use a dedicated build environment to avoid collecting unrelated optional packages.
+`-PythonCore` builds the previous PyInstaller-frozen Python backend instead of the Go core (install the full `requirements-build.txt` for that). The script also accepts `-DependencyPath "C:\path\to\python-libs"` for an isolated Python dependency directory, and `-CheckOnly` to validate build inputs without producing an executable.
 
 ## Development checks
 
-Run from the source folder with the build environment's Python and Node.js:
+Run from the source folder:
 
 ```powershell
-python -m unittest discover -s tests -p "test_*.py"
-node tests/test_pose.mjs
-node tests/test_viewer_math.mjs
-node tests/test_navigation.mjs
-node tests/test_materials.mjs
-node tests/test_object_hierarchy.mjs
+Set-Location gocore
+go vet ./...
+go test -short ./...                     # Go unit, oracle and end-to-end tests; oracle tests need Python with Pillow and NumPy, and skip otherwise
+python bench\difftest.py "$PWD\bin\owio-core.exe"   # Python core vs Go core, every reply and catalog.json
+Set-Location ..
+python -m unittest discover -s tests -p "test_*.py"   # the Python reference implementation
+node --test tests/*.mjs desktop/frames.test.cjs
 ```
 
-The pose test includes sampled matrices produced by an actual Blender 5.1 animation. Blender is not required to run those recorded fixture checks. Python and Node.js are not separate prerequisites for the packaged application.
+The renderer tests in `tests/*_ui.cjs` start `<python> app.py --serve`; set `WHITEHOUND_TEST_PYTHON` to `gocore/bench/python-shim` (a POSIX shell script: Linux, macOS, WSL) to run them against the Go core instead (see `tests/README.md` for their Playwright setup). The pose test includes sampled matrices produced by an actual Blender 5.1 animation. Blender is not required to run those recorded fixture checks. Go, Python and Node.js are not prerequisites for the packaged application.
 
 Texture regression fixtures are synthetic. Earlier releases checked the real Gameplay1P entity and animation with Autodesk's FBX reader; see `VALIDATION.md` for the distinction between parser, renderer, desktop and Cinema 4D checks.
 
