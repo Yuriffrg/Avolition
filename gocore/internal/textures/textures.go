@@ -57,12 +57,32 @@ var (
 
 // Result is load_texture's reply. The store keeps the PNG file; its JSON
 // form carries it as a "dataUri" (base64), produced only when encoded, while
-// binary replies send the bytes as they are.
+// binary replies send the bytes as they are. A compressed preview (see
+// LoadCompressed; binary replies only) has a Format and Mips instead of PNG.
 type Result struct {
 	PNG     []byte
 	Width   int
 	Height  int
 	Warning string
+	// Format is the block format ("bc1", "bc3", "bc7") of Mips, or "".
+	Format string
+	// Mips are the compressed levels, level 0 first, rows bottom to top.
+	Mips []Mip
+}
+
+// Mip is one block-compressed mip level.
+type Mip struct {
+	Width, Height int
+	Data          []byte
+}
+
+// size is the cached byte size of the result.
+func (r *Result) size() int {
+	size := len(r.PNG)
+	for _, mip := range r.Mips {
+		size += len(mip.Data)
+	}
+	return size
 }
 
 // DataURI is "data:image/png;base64,..." for the PNG.
@@ -112,7 +132,7 @@ func (r *Result) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	*r = Result{png, reply.Width, reply.Height, reply.Warning}
+	*r = Result{PNG: png, Width: reply.Width, Height: reply.Height, Warning: reply.Warning}
 	return nil
 }
 
@@ -130,6 +150,7 @@ type imageEntry struct {
 type resultKey struct {
 	id      string
 	maxEdge int
+	formats string // accepted compressed formats (canonical), "" for PNG
 }
 
 type resultEntry struct {
@@ -223,7 +244,7 @@ func (s *Store) pruneUnownedCache(previous map[string]Spec) {
 		if old, had := previous[entry.key.id]; !ok || !had || old != current {
 			s.results.Remove(element)
 			delete(s.resultIndex, entry.key)
-			s.resultBytes -= len(entry.result.PNG)
+			s.resultBytes -= entry.result.size()
 		}
 		element = next
 	}
@@ -326,7 +347,7 @@ func (s *Store) Load(textureID string, maxEdge int) (*Result, error) {
 		s.mu.Unlock()
 		return nil, errUnregistered
 	}
-	key := resultKey{textureID, maxEdge}
+	key := resultKey{textureID, maxEdge, ""}
 	if element, ok := s.resultIndex[key]; ok {
 		s.results.MoveToBack(element)
 		s.mu.Unlock()
@@ -348,26 +369,33 @@ func (s *Store) Load(textureID string, maxEdge int) (*Result, error) {
 		return nil, err
 	}
 
+	return s.storeResult(key, result, generation), nil
+}
+
+// storeResult caches a result unless a registration happened since
+// generation; a result cached meanwhile by a concurrent load wins.
+func (s *Store) storeResult(key resultKey, result *Result, generation uint64) *Result {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if element, ok := s.resultIndex[key]; ok { // a concurrent load finished first
-		return element.Value.(*resultEntry).result, nil
+		return element.Value.(*resultEntry).result
 	}
 	if s.generation != generation {
-		return result, nil
+		return result
 	}
-	for s.results.Len() > 0 && s.resultBytes+len(result.PNG) > CacheBytes {
+	size := result.size()
+	for s.results.Len() > 0 && s.resultBytes+size > CacheBytes {
 		oldest := s.results.Front()
 		entry := oldest.Value.(*resultEntry)
 		s.results.Remove(oldest)
 		delete(s.resultIndex, entry.key)
-		s.resultBytes -= len(entry.result.PNG)
+		s.resultBytes -= entry.result.size()
 	}
-	if len(result.PNG) <= CacheBytes {
+	if size <= CacheBytes {
 		s.resultIndex[key] = s.results.PushBack(&resultEntry{key, result})
-		s.resultBytes += len(result.PNG)
+		s.resultBytes += size
 	}
-	return result, nil
+	return result
 }
 
 // image returns the decoded (and possibly reduced) RGBA source.

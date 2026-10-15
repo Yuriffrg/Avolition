@@ -19,6 +19,7 @@ import (
 	"avolition/gocore/internal/formats"
 	"avolition/gocore/internal/protocol"
 	"avolition/gocore/internal/pycompat"
+	"avolition/gocore/internal/textures"
 )
 
 // Server is make_server's developer-only test host: it serves web/ with a
@@ -87,14 +88,18 @@ func (s *Server) bridge() string {
 	token, _ := pycompat.Dumps(s.token, -1)
 	// The bridge asks for binary frames (frames.go) and turns their blobs into
 	// typed arrays viewing the response buffer, like the desktop host does.
+	// setTextureFormats records the GPU block formats the renderer accepts;
+	// they go with every later load_texture request (see README "Compressed
+	// textures").
 	return `<script>window.pywebview={api:{}};(()=>{` +
+		`let formats="";window.pywebview.setTextureFormats=list=>{formats=Array.isArray(list)?list.filter(f=>typeof f==="string").join(","):"";return Promise.resolve(true);};` +
 		`const types={f32:Float32Array,f64:Float64Array,u32:Uint32Array,u16:Uint16Array,u8:Uint8Array};` +
 		`const attach=(value,arrays)=>{if(Array.isArray(value)){for(let i=0;i<value.length;i++)if(value[i]&&typeof value[i]==="object")value[i]=attach(value[i],arrays);return value;}` +
 		`if(Object.hasOwn(value,"$blob"))return arrays[value.$blob];for(const key in value)if(value[key]&&typeof value[key]==="object")value[key]=attach(value[key],arrays);return value;};` +
 		`const frame=buffer=>{const bytes=new Uint8Array(buffer),end=bytes.indexOf(10),head=JSON.parse(new TextDecoder().decode(bytes.subarray(0,end)));let offset=end+1;` +
 		`const arrays=head.blobs.map(([type,length])=>{const Type=types[type],array=new Type(buffer,offset,length/Type.BYTES_PER_ELEMENT);offset+=length+(8-length%8)%8;return array;});` +
 		`return head.result&&typeof head.result==="object"?attach(head.result,arrays):head.result;};` +
-		`for(const method of ` + string(methods) + `){window.pywebview.api[method]=(...args)=>fetch("/api/"+method,{method:"POST",headers:{"Content-Type":"application/json","X-Preview-Token":` + string(token) + `,"X-Avolition-Binary":"1"},body:JSON.stringify(args)})` +
+		`for(const method of ` + string(methods) + `){window.pywebview.api[method]=(...args)=>fetch("/api/"+method,{method:"POST",headers:{"Content-Type":"application/json","X-Preview-Token":` + string(token) + `,"X-Avolition-Binary":"1",...(method==="load_texture"&&formats?{"X-Avolition-Texture-Formats":formats}:{})},body:JSON.stringify(args)})` +
 		`.then(r=>r.headers.get("Content-Type")===` + strconv.Quote(FrameContentType) + `?r.arrayBuffer().then(frame):r.json());}` +
 		`})();</script>`
 }
@@ -161,6 +166,11 @@ func (s *Server) post(w http.ResponseWriter, r *http.Request) {
 		args, ok := decoded.([]any)
 		if !ok {
 			return nil, newValueError("Expected arguments")
+		}
+		if r.Header.Get("X-Avolition-Binary") == "1" {
+			// Only binary replies may carry compressed textures.
+			formats := strings.Split(r.Header.Get("X-Avolition-Texture-Formats"), ",")
+			return s.api.call(method, args, textures.CanonicalFormats(formats))
 		}
 		return s.api.Call(method, args)
 	}()

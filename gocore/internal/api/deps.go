@@ -24,6 +24,9 @@ type TextureStore interface {
 	// Load is load(texture_id, max_edge) with the raw request values (the
 	// store validates their types like Python). maxEdge is nil for None.
 	Load(textureID, maxEdge any) (any, error)
+	// LoadCompressed is Load for a binary reply whose host accepts the given
+	// GPU block formats (canonical, see textures.CanonicalFormats).
+	LoadCompressed(textureID, maxEdge any, formats string) (any, error)
 }
 
 // DuplicateIndex is duplicates.DuplicateIndex.

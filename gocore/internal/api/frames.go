@@ -110,10 +110,36 @@ type textureData struct{ result *textures.Result }
 
 func (d textureData) AppendJSON(dst []byte) ([]byte, error) { return d.result.AppendJSON(dst), nil }
 
+//
+// A compressed preview (the request listed "textureFormats") instead has
+//
+//	{"format":"bc7","width":W,"height":H,"mips":[{"width":W,"height":H,"data":{"$blob":0}},...]}
+//
+// with each mip level's blocks as a Uint8Array, level 0 first, rows bottom
+// to top (upload with flipY off).
 func (d textureData) AppendBinary(dst []byte, blobs *formats.Blobs) ([]byte, error) {
 	result := d.result
-	dst = append(dst, `{"png":`...)
-	dst = blobs.Add(dst, formats.BlobUint8, result.PNG)
+	if result.Format != "" {
+		dst = append(dst, `{"format":`...)
+		dst = appendString(dst, result.Format)
+		dst = append(dst, `,"mips":[`...)
+		for i, mip := range result.Mips {
+			if i > 0 {
+				dst = append(dst, ',')
+			}
+			dst = append(dst, `{"width":`...)
+			dst = strconv.AppendInt(dst, int64(mip.Width), 10)
+			dst = append(dst, `,"height":`...)
+			dst = strconv.AppendInt(dst, int64(mip.Height), 10)
+			dst = append(dst, `,"data":`...)
+			dst = blobs.Add(dst, formats.BlobUint8, mip.Data)
+			dst = append(dst, '}')
+		}
+		dst = append(dst, ']')
+	} else {
+		dst = append(dst, `{"png":`...)
+		dst = blobs.Add(dst, formats.BlobUint8, result.PNG)
+	}
 	dst = append(dst, `,"width":`...)
 	dst = strconv.AppendInt(dst, int64(result.Width), 10)
 	dst = append(dst, `,"height":`...)
