@@ -5,14 +5,17 @@
 // mode with desktop/frames.cjs.
 //
 //   cd desktop && xvfb-run -a node_modules/electron/dist/electron --no-sandbox \
-//     ../gocore/bench/transport_electron/main.cjs <owio-core> <library> [reps]
+//     ../gocore/bench/transport_electron/main.cjs <owio-core> <library> [reps] [modes]
+//
+// modes defaults to json,binary; pass json for a core without binary frames
+// (e.g. a script that runs python3 app.py).
 
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('node:path');
 const { Client, cases } = require('../transport_stdio.cjs');
 
 const args = process.argv.slice(process.argv.findIndex(arg => arg.endsWith(path.join('transport_electron', 'main.cjs'))) + 1);
-const [core, library, repsText] = args;
+const [core, library, repsText, modes = 'json,binary'] = args;
 const reps = Number(repsText) || 3;
 
 app.whenReady().then(async () => {
@@ -31,5 +34,5 @@ app.whenReady().then(async () => {
   const window = new BrowserWindow({ show: false, webPreferences: {
     preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true,
   } });
-  await window.loadFile(path.join(__dirname, 'index.html'), { query: { cases: JSON.stringify(cases(path.resolve(library))), reps: String(reps) } });
+  await window.loadFile(path.join(__dirname, 'index.html'), { query: { cases: JSON.stringify(cases(path.resolve(library))), reps: String(reps), modes } });
 });

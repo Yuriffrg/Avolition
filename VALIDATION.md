@@ -1,4 +1,18 @@
-# Avolition 0.8.22 validation
+# Avolition 0.8.23 validation
+
+## Go backend (2026-10-15)
+
+0.8.23 replaces the PyInstaller Python backend with the Go core in `gocore/`. All checks below ran in a Linux container (4 shared cores, no GPU, software WebGL); Windows, real Overwatch exports and Cinema 4D were not available. See `HANDOFF.md` for details and measurements.
+
+- **603 Go test functions pass** (`go vet ./...`, `go test -short -race ./...`), including the ported Python unit tests for every backend module and oracle tests that run the Python reference implementation on the same inputs and compare results, warnings and error messages. `GOOS=windows GOARCH=amd64 go build ./...` succeeds; Windows-only process handling (DataTool job objects, suspended start, `taskkill` fallback) was compile-checked only.
+- **Differential test, Python core vs Go core:** `gocore/bench/difftest.py` replayed identical request sequences (reads, catalog changes, exports, map export jobs, error cases) through both cores with fresh profiles: 1,205 replies compared (demo-assets 93, material-assets 114, synthetic 545 MB benchmark library 998), **0 differing**, and identical `catalog.json`.
+- **473 Python tests** of the reference implementation still pass.
+- **Renderer tests, both cores:** `test_export_queue_ui`, `test_maps_ui`, `test_object_search_ui`, `test_object_ui`, `test_objects_tree_ui`, `test_texture_ui`, `test_map_library_ui`, `test_map_export_ui`, `test_model_browser_ui`, `test_object_rename_ui`, `test_objects_lazy_ui`, `test_toolchain_maps_ui` and `test_toolchain_ui` pass against the Python core (JSON) and against the Go core (binary frames, via `gocore/bench/python-shim`). `node --test tests/*.mjs desktop/frames.test.cjs` passes 15/15.
+- **Desktop host:** Electron 44.4.3 ran headless under xvfb with the new host against the Go core (binary frames), against the Python core (JSON fallback), and with the 0.8.22 host and web files against the Go core. In the packaged layout `tests/test_desktop.cjs` and `tests/test_toolchain_desktop.cjs` passed; `tests/test_animation_set_desktop.cjs` passed its checks but timed out on its final screenshot, as the 0.8.22 host also does in this container; `tests/test_analysis_desktop.cjs` needs a Windows profile path and was not run.
+- **Cinema 4D payloads:** Go-built animation and map payloads were built by the unchanged companion's `c4d_scene.build_scene` against the fake Cinema 4D API from `tests/test_c4d_scene.py`; reports and object trees matched those from Python payloads. No native Cinema 4D or Octane save ran.
+- **Not run:** the Windows build script (`build.ps1` was edited but not executed), a real extraction with DataTool, real Overwatch exports, native Cinema 4D export, GPU rendering.
+
+## Avolition 0.8.22 validation (historical)
 
 ## Export Manager placement (2026-10-14)
 

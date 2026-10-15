@@ -117,7 +117,15 @@ backend process tree. Averages of two runs each.
 The Go numbers above exclude renderer parsing; the binary format also removes
 most of the work on the Electron side:
 
-ELECTRON_TABLE
+Time from request until the sandboxed renderer holds the reply's typed
+arrays, through the real Electron 44 host path (`desktop/frames.cjs` → IPC →
+context bridge), `gocore/bench/transport_electron`, medians of 3:
+
+| Reply | Python 0.8.22 (JSON) | Go (JSON) | Go (binary, shipped) | Speed-up |
+|---|---:|---:|---:|---:|
+| Heavy character (640k vertices) | 7,549 ms, 146 MB | 3,029 ms, 67 MB | **403 ms**, 49 MB | **~19×** |
+| Animation (200 bones × 240 frames) | 113 ms, 1.4 MB | 22 ms, 1.1 MB | **9 ms**, 0.9 MB | ~13× |
+| Map (3,600 placements) | 4,394 ms, 72 MB | 1,437 ms, 36 MB | **433 ms**, 27 MB | **~10×** |
 
 Other measurements:
 
@@ -128,7 +136,7 @@ Other measurements:
 | Bake 2048² textures, heavy character | 6.8 s | 1.1 s | ~6× |
 | Map export with texture baking | 52.5 s | 7.2 s | ~7× |
 | Animation analysis, 721 clips | 14.2 s | 1.7 s | ~8× |
-| difftest request sequence on the benchmark library | 198 s | 39 s | ~5× |
+| difftest request sequence on the benchmark library | 141 s | 28 s | ~5× |
 | Shipped backend size | PyInstaller folder (CPython + NumPy + Pillow) | 9.9 MB single exe | |
 
 The container's 4 cores are shared and barely scale; the Go core parallelises
