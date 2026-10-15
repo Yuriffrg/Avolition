@@ -12,6 +12,8 @@ and what is still open. Coding agents: also read `AGENTS.md`.
 | Backend `owio-core.exe` | `app.py` + `owpreview/` frozen with PyInstaller (CPython, NumPy, Pillow) | Go, `gocore/` (one ~9.9 MB executable, no Python runtime) |
 | Large replies | JSON text (meshes as number arrays, textures as base64 data URIs) | Binary frames → typed arrays in the renderer (JSON still supported) |
 | Texture requests | answered one at a time | consecutive `load_texture` calls decode in parallel |
+| Preview textures | PNG, decoded by the browser | BC7 (or BC1/BC3) GPU-compressed with mips when the GPU supports it, else PNG |
+| Map drawing | one draw call per mesh per placement | repeated props batched into instanced draws (`web/map-batching.js`) |
 | Build | `build.ps1` (PyInstaller) | `build.ps1` builds Go by default; `-PythonCore` for the old backend |
 | Cinema 4D companion | Python | Python, unchanged (runs inside Cinema 4D) |
 
@@ -32,6 +34,10 @@ Files outside `gocore/` that changed:
   material's shader in the background before first use (avoids frame stalls,
   which ANGLE on Windows makes long); `web/materials.js` keeps up to one
   texture request per CPU core in flight (4–8, was 4).
+- `web/map-batching.js` (new): instanced drawing for static maps (see
+  "Batched map rendering").
+- `desktop/preload.cjs`, `desktop/main.cjs`, `web/materials.js`: compressed
+  texture negotiation (see "Compressed preview textures").
 - `build.ps1`, `tools/package_desktop.py`: Go build by default, ship
   `frames.cjs`, no Python runtime or Python license files in a Go build.
 - `licenses/GO-LICENSE.txt`, `GOLANG-X-IMAGE-LICENSE.txt`,
@@ -196,6 +202,36 @@ PNG and the BC7 and BC1 paths and compares them at full size and minified
 upload speed, driver acceptance of non-power-of-two compressed sizes, and
 visual quality on real Overwatch textures.
 
+## Batched map rendering
+
+Static map scenes (`PreviewViewport._staticScene`) no longer draw one mesh per
+placement. `web/map-batching.js` draws placements that share geometry and the
+material currently shown as one `THREE.InstancedMesh`; wire overlays batch the
+same way. The per-placement meshes stay in the scene graph as the source of
+truth (object tree, visibility, renaming, framing, texture loading); their own
+draw is switched off with an empty layer mask. `sync()` (on invalidated
+frames) follows material/visibility changes, `cull()` (every rendered frame)
+keeps per-instance frustum culling. Mirrored placements batch separately with a
+mirrored batch matrix (same front-face flip as before); transparent and skinned
+meshes still draw themselves; animating a map dissolves the batches.
+Characters are untouched. Test: `tests/test_map_batching.mjs`.
+
+`gocore/bench/render_map.cjs` on the benchmark map (3,600 placements, 300
+props, textured), headless Chromium with SwiftShader, so draw calls are exact
+and times only indicative (rasterising 11M triangles in software takes ~24 s a
+frame and hides the GPU-side gain):
+
+| | before | after |
+|---|---:|---:|
+| Draw calls, overview | 3,601 | 301 |
+| Draw calls, close view | 64 | 57 |
+| Triangles (overview / close) | 10.95M / 192k | 10.95M / 192k |
+| `renderer.render()` CPU time per orbit frame | 34.8 ms | 14.4 ms |
+| JS heap after textures | 31.3 MB | 33.4 MB |
+
+Screenshots from the same camera: close view identical (max 2/255); overview
+0.004% of pixels differ (max 33/255, instance order at depth ties).
+
 ## If something breaks
 
 Start with the log: `%LOCALAPPDATA%\Avolition\desktop\avolition.log`. The
@@ -244,6 +280,12 @@ Likely failure points, why, and where to look:
   0.8.22).
 - **Textures load slowly on the user's PC.** The BC7 encode runs on the CPU in
   the core; on a weak CPU PNG may be faster. Measure with the switch above.
+- **Map objects missing, flickering, wrong texture or visibility toggles not
+  working on maps (characters fine).** Map batching: `web/map-batching.js`
+  (`MapBatches.sync`/`cull`), hooked into `web/viewer.js` (`loadAsset`,
+  `_renderFrame`, `_clear`). To rule it out, skip the `new MapBatches(...)`
+  block in `viewer.js` `loadAsset` (maps then draw one mesh per placement as
+  in 0.8.22). Unit test: `node tests/test_map_batching.mjs`.
 - **Wrong texture on a mesh after quickly switching assets.** Texture loads
   now run in parallel (`concurrent` in `gocore/internal/api/stdio.go`) and
   replies can arrive out of order; the host matches them by id. Check the
@@ -275,6 +317,10 @@ run. Before releasing, please:
 4. Export to Cinema 4D with the companion (only simulated here; the companion
    code itself is unchanged).
 5. Check `%LOCALAPPDATA%\Avolition\catalog.json` from 0.8.22 loads unchanged.
+6. Open a large real map: check it looks the same as in 0.8.22 (batching),
+   that hiding objects in Preview objects works, and compare texture load time
+   with `AVOLITION_COMPRESSED_TEXTURES=0` (BC7 encoding speed on real CPUs and
+   compressed uploads on real GPUs were not measured).
 
 No real Overwatch assets, Windows, Cinema 4D or GPU were available; all asset
 checks used synthetic fixtures.
