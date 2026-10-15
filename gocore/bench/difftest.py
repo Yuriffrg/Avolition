@@ -33,16 +33,20 @@ class Core:
                                         env=dict(os.environ, **(env or {})))
         self.next_id = 0
         self.seconds = 0.0
+        self.by_method = {}
 
     def call(self, method, *args, raw=None):
         self.next_id += 1
+        self.method = method or 'raw'
         line = raw if raw is not None else json.dumps({'id': self.next_id, 'method': method, 'args': list(args)}, ensure_ascii=False)
         line = line.replace('<DATA>', json.dumps(self.data_dir)[1:-1])
         started = time.perf_counter()
         self.process.stdin.write(line.encode('utf-8') + b'\n')
         self.process.stdin.flush()
         reply = self.process.stdout.readline()
-        self.seconds += time.perf_counter() - started
+        elapsed = time.perf_counter() - started
+        self.seconds += elapsed
+        self.by_method[self.method] = self.by_method.get(self.method, 0) + elapsed
         if not reply:
             raise RuntimeError(f'{self.label} core stopped')
         return json.loads(reply)
@@ -292,6 +296,9 @@ def main():
         s = run_library(go_binary, library)
         print(f'{library}: {s.count} replies compared, {s.failures} differing; '
               f'Python {s.python.seconds:.2f}s, Go {s.go.seconds:.2f}s')
+        slowest = sorted(s.go.by_method, key=s.go.by_method.get, reverse=True)[:6]
+        print('   slowest (Python s / Go s): ' + ', '.join(
+            f'{name} {s.python.by_method.get(name, 0):.2f}/{s.go.by_method[name]:.2f}' for name in slowest))
         failed |= bool(s.failures)
     sys.exit(1 if failed else 0)
 

@@ -55,9 +55,20 @@ func TestAgainstRealPythonCore(t *testing.T) {
 	}
 	input.WriteString("{bad json\n")
 
+	for _, mode := range []string{"hybrid", "go"} {
+		t.Run(mode, func(t *testing.T) { runScenario(t, binary, repo, script, interpreter, input.String(), requests, mode) })
+	}
+}
+
+func runScenario(t *testing.T, binary, repo, script, interpreter, input string, requests []map[string]any, mode string) {
 	cmd := exec.Command(binary, "--stdio", "--data-dir", filepath.Join(t.TempDir(), "state"), "--app-dir", repo)
 	cmd.Env = append(os.Environ(), "AVOLITION_PYTHON_CORE="+script, "AVOLITION_PYTHON="+interpreter)
-	cmd.Stdin = strings.NewReader(input.String())
+	if mode == "go" {
+		cmd.Env = append(cmd.Env, "AVOLITION_GO_API=1", "AVOLITION_PYTHON_CORE=/nonexistent/app.py")
+	} else {
+		cmd.Env = append(cmd.Env, "AVOLITION_GO_API=")
+	}
+	cmd.Stdin = strings.NewReader(input)
 	stdout, _ := cmd.StdoutPipe()
 	var stderr strings.Builder
 	cmd.Stderr = &stderr

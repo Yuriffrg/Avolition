@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"avolition/gocore/internal/formats"
@@ -109,9 +110,9 @@ func TestRepeatedAttachmentInstancesCountAndCachedHeadersAreReused(t *testing.T)
 	main := f.write("Gameplay3P.owentity", entity("Body.owmdl", ".", "Child.owentity", "Child.owentity"))
 	for _, batch := range []bool{false, true} {
 		x := f.index()
-		calls := 0
+		var calls atomic.Int64 // header reads run on a worker pool
 		x.readHeader = func(path string) (int, error) {
-			calls++
+			calls.Add(1)
 			return ReadModelBoneCount(path)
 		}
 		if batch {
@@ -128,8 +129,8 @@ func TestRepeatedAttachmentInstancesCountAndCachedHeadersAreReused(t *testing.T)
 			assertCount(t, x, body, 2)
 			assertCount(t, x, weapon, 1)
 		}
-		if calls != 2 {
-			t.Fatalf("batch=%v: %d header reads", batch, calls)
+		if calls.Load() != 2 {
+			t.Fatalf("batch=%v: %d header reads", batch, calls.Load())
 		}
 	}
 }

@@ -5,38 +5,52 @@ changing the desktop shell or the web UI.
 
 ## How it works
 
+`internal/api` is the Go port of `app.py`'s `BrowserAPI`: every desktop API
+method, `catalog.json` (unknown keys and key order preserved, written
+atomically in `json.dumps(indent=2, ensure_ascii=False)` form), the export
+list, object names, entity previews and texture ownership, plus the `--stdio`
+transport, the developer `--serve` host and `--self-test`.
+
 ```
 Electron (desktop/main.cjs)
    │  --stdio JSON lines (same protocol as app.py)
    ▼
-Go owio-core ── ported methods: answered in Go
-   │
-   └─ every other method: forwarded byte for byte
-      ▼
-   Python core (app.py, or the PyInstaller build in backend/python-core)
+Go owio-core ── internal/api (BrowserAPI) ── formats, materials, textures, …
 ```
 
-- Requests are validated exactly like `run_stdio` in `app.py`: the same method
-  list, id rules, argument checks and error messages.
-- The Python core is started only when a request first needs it. Its replies
-  are streamed back in chunks, so large mesh replies are never held in memory
-  a second time.
-- Go answers ported methods immediately, even while Python is still working on
-  a long call. The desktop shell already matches replies by id.
-- If the Python core stops on its own, the Go core exits too, so the desktop
-  shell shows the same "local importer stopped" error as before.
-- On Windows the Python core runs hidden, in a kill-on-close job object. If the
-  Go core is terminated, Python and any DataTool process it started end with it.
-- `--serve` and `--self-test` are passed straight to the Python core.
+- Requests are validated exactly like `run_stdio` in `app.py` (same method
+  list, id rules, argument-count `TypeError` texts and `json.loads` error
+  messages) and answered serially, in order. Long-running work (Toolchain,
+  DataTool, analysis, map exports) runs in background goroutines polled by the
+  status methods, as in Python.
+- Mesh and clip replies are encoded with `formats.AppendAssetJSON` /
+  `AppendClipJSON` straight into the output buffer.
 
-### Ported so far (phase 1)
+### Migration phase (until every module is ported)
 
-`ping`, `close_app`, `browse_root`, `browse_output`, `browse_entity`,
-`browse_map`, `browse_workflow_directory`.
+`api.Missing(api.Default())` lists modules that are not ported yet. While it is
+not empty, `owio-core` keeps the Python core as the owner of all state and
+answers only `api.Stateless` methods in Go (ping, dialogs, `load_animation`,
+`read_clip_bindings`, `c4d_status`); everything else is forwarded to Python.
+Splitting stateful methods between two processes would let them overwrite each
+other's `catalog.json` and lose loaded-asset/texture registrations.
 
-Only stateless methods are ported in phase 1. `catalog.json` stays owned by
-Python until every method that writes it has been ported. Otherwise the two
-cores would overwrite each other's changes.
+`AVOLITION_GO_API=1` forces the Go API for every mode (methods whose modules
+are missing return an error). `bench/python-shim` uses it so the renderer
+tests can run against the Go core, and `bench/difftest.py` compares the two
+cores reply by reply.
+
+When `api.Missing` is empty the Python core is no longer started at all.
+
+The Python core (hybrid phase only) is found in this order:
+
+1. `AVOLITION_PYTHON_CORE`: a frozen executable or a `.py` file.
+2. `python-core/owio-core(.exe)` beside the Go binary (the packaged layout).
+3. `app.py` in the binary's folder or up to three parent folders (a source
+   checkout).
+
+A `.py` core runs with `AVOLITION_PYTHON` (default `python` on Windows,
+`python3` elsewhere). On Windows it runs hidden, in a kill-on-close job object.
 
 ## Develop
 
@@ -44,6 +58,9 @@ cores would overwrite each other's changes.
 cd gocore
 go test ./...                       # includes an end-to-end run against app.py + tests/demo-assets
 go build -o bin/owio-core ./cmd/owio-core
+python3 bench/difftest.py bin/owio-core     # Python vs Go, every reply and catalog.json
+# Renderer tests against the Go core (--serve):
+PLAYWRIGHT_MODULE=$(npm root -g)/playwright WHITEHOUND_TEST_PYTHON=$PWD/bench/python-shim node ../tests/test_texture_ui.cjs
 ```
 
 The Python core is found in this order:
