@@ -452,7 +452,7 @@ func (a *API) catalogGet(name string) any {
 }
 
 func (a *API) catalogDict(name string) *ordered.Map[any] {
-	value, _ := a.catalog.Get(name).(*ordered.Map[any])
+	value, _ := a.catalogGet(name).(*ordered.Map[any])
 	return value
 }
 

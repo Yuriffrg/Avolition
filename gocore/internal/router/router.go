@@ -123,6 +123,18 @@ func respond(request protocol.Request, handler Handler) (line []byte) {
 	if err != nil {
 		return protocol.Error(request.ID, err.Error())
 	}
+	if appender, ok := data.(interface{ AppendJSON([]byte) ([]byte, error) }); ok {
+		// Large replies (meshes, clips) encode themselves without reflection.
+		id := request.ID
+		if len(id) == 0 {
+			id = json.RawMessage("null")
+		}
+		line = append(append([]byte(`{"id":`), id...), `,"result":{"ok":true,"data":`...)
+		if line, err = appender.AppendJSON(line); err != nil {
+			return protocol.Error(request.ID, err.Error())
+		}
+		return append(line, "}}\n"...)
+	}
 	line, err = protocol.Success(request.ID, data)
 	if err != nil {
 		return protocol.Error(request.ID, err.Error())

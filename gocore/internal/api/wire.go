@@ -12,6 +12,7 @@ import (
 	"avolition/gocore/internal/formats"
 	_ "avolition/gocore/internal/materials" // load_asset's real materials
 	"avolition/gocore/internal/mapformats"
+	"avolition/gocore/internal/objectnames"
 	"avolition/gocore/internal/ordered"
 	"avolition/gocore/internal/textures"
 	"avolition/gocore/internal/toolchain"
@@ -34,6 +35,7 @@ func Default() Deps {
 		NewClipBindings: func() ClipBindings { return clipBindings{clipbindings.NewDefault()} },
 		NewBridge:       func(root string) Bridge { return &bridgeClient{c4dbridge.NewClient(root)} },
 		NewAnalysis:     newAnalysis,
+		ObjectNames:     objectNames{},
 		NewToolchain: func(root string, activity toolchain.ActivityLock) Toolchain {
 			return toolchain.NewManager(root, toolchain.Options{ActivityLock: activity})
 		},
@@ -196,4 +198,15 @@ func (m *analysisManager) Detail(path, root any) (any, error) {
 		return detail, nil
 	}
 	return nil, nil
+}
+
+type objectNames struct{}
+
+func (objectNames) ValidateName(name any) (string, error) { return objectnames.ValidateName(name) }
+func (objectNames) ValidateNames(names any, asset *formats.Asset) (*ordered.Map[string], error) {
+	return objectnames.ValidateNames(names, asset)
+}
+func (objectNames) Keys(asset *formats.Asset) (map[string]bool, error) { return objectnames.ObjectNameKeys(asset) }
+func (objectNames) Apply(asset *formats.Asset, names any) (*formats.Asset, error) {
+	return objectnames.ApplyObjectNames(asset, names)
 }

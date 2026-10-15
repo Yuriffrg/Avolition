@@ -51,9 +51,9 @@ func init() {
 		"set_export_settings": m("options", 1, nil, "", func(a *API, x []any) (any, error) {
 			return a.SetExportSettings(x[0])
 		}),
-		"export_animation": m("path,nickname,output_folder,options", 2, []any{nil, nil}, "scene,bridge,objectNames",
+		"export_animation": m("path,nickname,output_folder,options", 2, []any{nil, nil}, "bridge,objectNames",
 			func(a *API, x []any) (any, error) { return a.ExportAnimation(x[0], x[1], x[2], x[3]) }),
-		"export_animation_set": m("entity_path,assignments,scene_name,output_folder,options", 3, []any{nil, nil}, "scene,bridge,objectNames",
+		"export_animation_set": m("entity_path,assignments,scene_name,output_folder,options", 3, []any{nil, nil}, "bridge,objectNames",
 			func(a *API, x []any) (any, error) { return a.ExportAnimationSet(x[0], x[1], x[2], x[3], x[4]) }),
 		"c4d_status":    m("", 0, nil, "bridge", func(a *API, _ []any) (any, error) { return a.bridge.Status(), nil }),
 		"browse_entity": m("", 0, nil, "", func(*API, []any) (any, error) { return nil, &runtimeError{"File dialogs are provided by the Avolition desktop window."} }),
@@ -97,7 +97,7 @@ func init() {
 		}),
 		"export_queue_save":   m("entry", 1, nil, "objectNames", func(a *API, x []any) (any, error) { return a.ExportQueueSave(x[0]) }),
 		"export_queue_remove": m("ident", 1, nil, "", func(a *API, x []any) (any, error) { return a.ExportQueueRemove(x[0]) }),
-		"export_queue_run": m("ident,output_folder,options", 1, []any{nil, nil}, "scene,bridge,objectNames",
+		"export_queue_run": m("ident,output_folder,options", 1, []any{nil, nil}, "bridge,objectNames",
 			func(a *API, x []any) (any, error) { return a.ExportQueueRun(x[0], x[1], x[2]) }),
 		"open_export_output": m("", 0, nil, "", func(a *API, _ []any) (any, error) { return a.OpenExportOutput() }),
 		"maps_settings":      m("changes", 0, []any{nil}, "", func(a *API, x []any) (any, error) { return a.MapsSettings(x[0]) }),
@@ -195,7 +195,7 @@ func (a *API) has(dependency string) bool {
 	case "analysis":
 		return a.analysis != nil
 	case "scene":
-		return a.deps.Scene != nil
+		return a.deps.BakeMaterials != nil
 	case "exportMap":
 		return a.deps.ExportMap != nil
 	case "toolchain":

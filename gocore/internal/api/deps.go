@@ -1,6 +1,7 @@
 package api
 
 import (
+	"avolition/gocore/internal/c4dexport"
 	"avolition/gocore/internal/bonecounts"
 	"avolition/gocore/internal/datatool"
 	"avolition/gocore/internal/formats"
@@ -45,7 +46,7 @@ type ObjectNames interface {
 	// Keys is object_name_keys(asset).
 	Keys(asset *formats.Asset) (map[string]bool, error)
 	// Apply is apply_object_names(asset, names): a renamed copy.
-	Apply(asset *formats.Asset, names *ordered.Map[string]) (*formats.Asset, error)
+	Apply(asset *formats.Asset, names any) (*formats.Asset, error)
 }
 
 // BridgeStatus is BridgeClient.status(); it encodes as the status dict.
@@ -82,45 +83,11 @@ type Analysis interface {
 
 // Materials is a baked or neutral material table: model id → material key →
 // descriptor (export_textures.bake_materials()['materials']).
-type Materials = *ordered.Map[*ordered.Map[*formats.Material]]
+type Materials = *c4dexport.Materials
 
-// Payload is a C4D export payload (c4d_export.make_payload).
-type Payload interface {
-	SetMaterials(materials Materials)
-	Warnings() []string
-}
-
-// SetPayload is c4d_export.make_set_payload's payload.
-type SetPayload interface {
-	Payload
-	// Animation returns payload['animation'].get('assignments', []), ['fps']
-	// and ['lastFrame'].
-	Animation() (assignments, fps, lastFrame any)
-}
-
-// AssignedClip is one {'modelId', 'clip'} entry of make_set_payload.
-type AssignedClip struct {
-	ModelID string
-	Clip    *formats.Clip
-}
-
-// BundleBuilder is export_bundle's builder(destinations, texture_folder):
-// destinations maps 'fbx'/'c4d' to staging paths. It returns the warnings.
-type BundleBuilder func(destinations map[string]string, textureFolder string) ([]string, error)
-
-// SceneExporter bundles export_bundle, c4d_export, export_textures and fbx.
-type SceneExporter interface {
-	// Bundle is export_bundle(source, folder, filename, builder, formats).
-	Bundle(source, folder, filename string, build BundleBuilder, formats []string) (*ordered.Map[any], error)
-	SelectModelAsset(asset *formats.Asset, modelID string) (*formats.Asset, error)
-	MakePayload(asset *formats.Asset, clip *formats.Clip, materials Materials, includeMesh, rootMotion bool, clipName, rigID string) (Payload, error)
-	MakeSetPayload(asset *formats.Asset, clips []AssignedClip, includeMesh, rootMotion bool, name string) (SetPayload, error)
-	// BakeMaterials is bake_materials(asset, folder): materials and warnings.
-	BakeMaterials(asset *formats.Asset, textureFolder string) (Materials, []string, error)
-	// ExportFBX is export_fbx(...); it returns the result's warnings.
-	ExportFBX(destination string, asset *formats.Asset, clip *formats.Clip, upAxis string, includeMesh, rootMotion bool,
-		materials Materials, clipName, rigID string) ([]string, error)
-}
+// BakeMaterials is export_textures.bake_materials(asset, folder): the
+// materials and the warnings.
+type BakeMaterials func(asset *formats.Asset, textureFolder string) (Materials, []string, error)
 
 // Progress is a map export progress callback (message, completed, total).
 type Progress func(message string, completed, total any)
@@ -171,7 +138,7 @@ type Deps struct {
 	ObjectNames     ObjectNames
 	NewBridge       func(root string) Bridge
 	NewAnalysis     func(cacheDir string, hooks AnalysisHooks) Analysis
-	Scene           SceneExporter
+	BakeMaterials   BakeMaterials
 	ExportMap       MapExporter
 	NewMapJobs      func() MapJobs
 	NewToolchain    func(root string, activity toolchain.ActivityLock) Toolchain

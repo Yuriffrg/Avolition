@@ -4,6 +4,7 @@
 package protocol
 
 import (
+	"avolition/gocore/internal/pycompat"
 	"bytes"
 	"encoding/json"
 	"unicode/utf8"
@@ -50,7 +51,8 @@ type Failure struct {
 // Parse validates one line in the same order as app.py, so the reply id is
 // null for exactly the failures where Python could not establish one.
 func Parse(line []byte) (Request, *Failure) {
-	if utf8.RuneCount(line) > MaxRequestChars {
+	// Python counts the line with its "\n" terminator.
+	if utf8.RuneCount(line)+1 > MaxRequestChars {
 		return Request{}, &Failure{Message: "Request too large"}
 	}
 	if !utf8.Valid(line) {
@@ -58,7 +60,13 @@ func Parse(line []byte) (Request, *Failure) {
 	}
 	trimmed := bytes.TrimSpace(line)
 	if !json.Valid(trimmed) {
-		return Request{}, &Failure{Message: "Invalid JSON request"}
+		// json.loads(line) on the "\n"-terminated line: report its exact
+		// error text, positions included.
+		message := "Invalid JSON request"
+		if _, err := pycompat.LoadsText(string(line) + "\n"); err != nil {
+			message = err.Error()
+		}
+		return Request{}, &Failure{Message: message}
 	}
 	var fields map[string]json.RawMessage
 	if trimmed[0] != '{' || json.Unmarshal(trimmed, &fields) != nil {

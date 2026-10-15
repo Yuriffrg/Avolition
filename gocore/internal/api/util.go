@@ -159,6 +159,9 @@ func pyOSError(err error) error {
 func isNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }
 
 // errorText is reply()'s `str(error) or type(error).__name__`.
+// ErrorText is the reply error text of err.
+func ErrorText(err error) string { return errorText(err) }
+
 func errorText(err error) string {
 	if message := err.Error(); message != "" {
 		return message
@@ -268,6 +271,6 @@ func fbxOptions(value any) (*ordered.Map[any], error) {
 }
 
 func flag(dict *ordered.Map[any], name string) bool {
-	value, _ := dict.Get(name).(bool)
+	value, _ := get(dict, name).(bool)
 	return value
 }

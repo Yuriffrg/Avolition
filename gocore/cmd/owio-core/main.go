@@ -1,9 +1,17 @@
 // Command owio-core is the Go core of Avolition. It speaks the same private
-// --stdio JSON-lines protocol as app.py, answers ported methods itself and
-// forwards the rest to the Python core, which it starts on first use.
+// --stdio JSON-lines protocol as app.py and serves the developer --serve host
+// and --self-test.
+//
+// When every module BrowserAPI depends on is ported (api.Missing is empty),
+// the Go API answers everything and the Python core is never started.
+// Otherwise only the stateless methods (api.Stateless) are answered in Go and
+// the rest is forwarded to the Python core, which then keeps sole ownership
+// of catalog.json and the loaded-asset registries. AVOLITION_GO_API=1 forces
+// the Go API for every mode (methods whose modules are missing then fail).
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,17 +21,18 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"avolition/gocore/internal/api"
 	"avolition/gocore/internal/pycore"
 	"avolition/gocore/internal/router"
 )
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "owio-core:", err)
 		var exit exitCode
 		if errors.As(err, &exit) {
 			os.Exit(int(exit))
 		}
+		fmt.Fprintln(os.Stderr, "owio-core:", err)
 		os.Exit(1)
 	}
 }
@@ -39,12 +48,12 @@ func run() error {
 		flags.PrintDefaults()
 	}
 	stdio := flags.Bool("stdio", false, "Private transport used by the Avolition desktop host")
-	serve := flags.Bool("serve", false, "Developer-only loopback test server (handled by the Python core)")
+	serve := flags.Bool("serve", false, "Developer-only loopback test server; never opens a browser")
 	port := flags.Int("port", 8765, "Developer server port")
 	root := flags.String("root", "", "Initial library root")
 	dataDir := flags.String("data-dir", "", "Profile directory")
 	appDir := flags.String("app-dir", "", "Portable app directory supplied by the desktop host")
-	selfTest := flags.String("self-test", "", "Write a self-test report to this path (handled by the Python core)")
+	selfTest := flags.String("self-test", "", "Write a self-test report to this path")
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		return exitCode(2)
 	}
@@ -60,42 +69,95 @@ func run() error {
 	if resolved, err := filepath.EvalSymlinks(executable); err == nil {
 		executable = resolved
 	}
-	command, locateErr := pycore.Locate(filepath.Dir(executable))
-
-	// Same options, in app.py's spelling, for whichever core receives them.
-	var options []string
 	set := map[string]bool{}
 	flags.Visit(func(f *flag.Flag) { set[f.Name] = true })
-	if set["root"] {
-		options = append(options, "--root", *root)
+	if !set["app-dir"] {
+		if dir := filepath.Dir(executable); filepath.Base(dir) == "backend" && filepath.Base(filepath.Dir(dir)) == "resources" {
+			*appDir = filepath.Dir(filepath.Dir(dir))
+		}
 	}
-	if set["data-dir"] {
-		options = append(options, "--data-dir", *dataDir)
-	}
-	if set["app-dir"] {
-		options = append(options, "--app-dir", *appDir)
-	} else if dir := filepath.Dir(executable); filepath.Base(dir) == "backend" && filepath.Base(filepath.Dir(dir)) == "resources" {
-		// app.py derives the portable folder from its own location, which
-		// moves to resources/backend/python-core behind the Go core.
-		options = append(options, "--app-dir", filepath.Dir(filepath.Dir(dir)))
+	options := api.Options{DataDir: *dataDir, InitialRoot: *root, DesktopMode: *stdio, AppDir: *appDir}
+
+	if len(api.Missing(api.Default())) == 0 || os.Getenv("AVOLITION_GO_API") == "1" {
+		return runGo(options, *stdio, *serve, *port, *root, *selfTest)
 	}
 
+	// Hybrid phase: Python owns all state.
+	command, locateErr := pycore.Locate(filepath.Dir(executable))
+	var pyOptions []string
+	if set["root"] {
+		pyOptions = append(pyOptions, "--root", *root)
+	}
+	if set["data-dir"] {
+		pyOptions = append(pyOptions, "--data-dir", *dataDir)
+	}
+	if *appDir != "" {
+		// app.py derives the portable folder from its own location, which
+		// moves to resources/backend/python-core behind the Go core.
+		pyOptions = append(pyOptions, "--app-dir", *appDir)
+	}
 	if !*stdio {
-		// The developer server and self-test are not ported yet: run Python.
 		if locateErr != nil {
 			return locateErr
 		}
 		if *serve {
-			options = append(options, "--serve", "--port", strconv.Itoa(*port))
+			pyOptions = append(pyOptions, "--serve", "--port", strconv.Itoa(*port))
 		}
 		if *selfTest != "" {
-			options = append(options, "--self-test", *selfTest)
+			pyOptions = append(pyOptions, "--self-test", *selfTest)
 		}
-		return delegate(command, options)
+		return delegate(command, pyOptions)
 	}
+	stateless := api.NewStateless(options)
+	native := map[string]router.Handler{}
+	for _, name := range api.Stateless {
+		if stateless.Unavailable(name) != nil {
+			continue
+		}
+		native[name] = handler(stateless, name)
+	}
+	backend := &python{command: command, locateErr: locateErr, args: append([]string{"--stdio"}, pyOptions...)}
+	return router.New(os.Stdout, backend, native).Serve(os.Stdin)
+}
 
-	backend := &python{command: command, locateErr: locateErr, args: append([]string{"--stdio"}, options...)}
-	return router.New(os.Stdout, backend, router.Native()).Serve(os.Stdin)
+func handler(a *api.API, name string) router.Handler {
+	return func(raw []json.RawMessage) (any, error) {
+		args, err := api.DecodeArgs(raw)
+		if err != nil {
+			return nil, err
+		}
+		data, err := a.Call(name, args)
+		if err != nil {
+			return nil, errors.New(api.ErrorText(err))
+		}
+		return data, nil
+	}
+}
+
+func runGo(options api.Options, stdio, serve bool, port int, root, selfTest string) error {
+	a, err := api.New(options)
+	if err != nil {
+		return err
+	}
+	if selfTest != "" {
+		return api.SelfTest(a, root, selfTest)
+	}
+	if stdio {
+		defer a.Shutdown()
+		return a.ServeStdio(os.Stdin, os.Stdout)
+	}
+	_ = serve
+	webRoot, err := api.FindWebRoot()
+	if err != nil {
+		return err
+	}
+	server, err := api.NewServer(a, webRoot, port)
+	if err != nil {
+		return err
+	}
+	defer a.Shutdown()
+	fmt.Println("Avolition developer server: http://127.0.0.1:" + strconv.Itoa(server.Port()))
+	return server.Serve()
 }
 
 // python adapts pycore to the router's lazily started Backend.
