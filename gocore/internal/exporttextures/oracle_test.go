@@ -170,7 +170,7 @@ func compareBake(t *testing.T, asset *formats.Asset, pythonAsset any, prefix str
 	if err := encoder.Encode(result); err != nil {
 		t.Fatal(err)
 	}
-	want := strings.ReplaceAll(string(python.Result), pyDir, goDir)
+	want := oracle.ReplaceJSONPath(string(python.Result), pyDir, goDir)
 	want = bytesIO.ReplaceAllString(want, "<_io.BytesIO>")
 	gotText := bytesIO.ReplaceAllString(encoded.String(), "<_io.BytesIO>")
 	diffs, err := jsoncmp.Diff([]byte(want), []byte(gotText), jsoncmp.Options{MaxDiffs: 30})

@@ -205,12 +205,13 @@ async function sample(mode){return page.evaluate(async mode=>{
   await page.locator('#maps-root').fill(root);await click(page.locator('#maps-scan'));
   await page.waitForFunction(()=>!document.querySelector('#maps-scan').disabled&&Number(document.querySelector('#maps-count').textContent)>0);
   report.libraryVariants=Number(await page.locator('#maps-count').innerText());
-  await page.locator('#maps-search').fill('Hybrid');
-  const leaf=page.locator('.map-row').filter({hasText:'Evening - Hybrid'});
+  const variant=path.basename(mapFile,'.owmap');
+  await page.locator('#maps-search').fill(variant);
+  const leaf=page.locator('.map-row').filter({has:page.getByText(variant,{exact:true})});
   assert.equal(await leaf.count(),1);
   if(!baseline){assert.equal(await page.locator('#maps-list').getAttribute('role'),'tree');
     report.mapTree=await page.locator('#maps-list .map-library-name').allTextContents();
-    assert.ok(report.mapTree.includes("King's Row (Winter)"));assert.ok(report.mapTree.includes('6B1'));}
+    assert.ok(report.mapTree.includes(path.basename(path.dirname(root))));assert.ok(report.mapTree.includes(path.basename(root)));}
   const start=Date.now();await click(leaf);console.log(JSON.stringify({progress:'Loading real map geometry and materials',scratch,baseline,mapFile,timeoutMs:timeout}));startProgress(start);
   await page.waitForFunction(()=>document.querySelector('#maps-loading').hidden
     &&(window.qaMapMaterials||document.querySelector('#maps-status').classList.contains('error')),null,{timeout});

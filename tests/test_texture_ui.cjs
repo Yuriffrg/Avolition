@@ -33,7 +33,7 @@ server.stderr.on('data', chunk => {errorLog += chunk.toString();});
   assert.equal(await page.locator('#viewport-error-title').isHidden(),true);
   assert.equal((await page.locator('#viewport-empty').innerText()).includes('making overwatch'),false);
   assert.equal(await page.locator('#app-logo, .avolition-empty-logo, .empty-note').count(),0);
-  assert.equal(await page.locator('.local-badge .version').innerText(),'v0.8.23');
+  assert.equal(await page.locator('.local-badge .version').innerText(),'v0.8.24');
   assert.equal(await page.locator('#polygon-count').isHidden(),true);
   assert.equal(await page.locator('#favorites-filter, #favorite-clip, .clip-favorite, #i-star').count(),0);
   assert.equal(await page.locator('#clip-notes, #status-extra').count(),0);

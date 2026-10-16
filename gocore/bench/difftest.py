@@ -59,7 +59,9 @@ class Core:
 
 def normalize(value, data_dir):
     if isinstance(value, str):
-        return value.replace(data_dir, '<DATA>')
+        # Catalog path keys are normcase'd on Windows; normalize both spellings
+        # of each isolated profile without masking differences in other values.
+        return value.replace(data_dir, '<DATA>').replace(os.path.normcase(data_dir), '<DATA>')
     if isinstance(value, list):
         return [normalize(item, data_dir) for item in value]
     if isinstance(value, dict):
@@ -144,7 +146,12 @@ class Session:
         problems = diff(normalize(left, self.python.data_dir), normalize(right, self.go.data_dir), '$catalog')
         raw_left = (self.workspace / 'py-profile' / 'catalog.json').read_text(encoding='utf-8')
         raw_right = (self.workspace / 'go-profile' / 'catalog.json').read_text(encoding='utf-8')
-        if not problems and raw_left.replace(self.python.data_dir, '<DATA>') != raw_right.replace(self.go.data_dir, '<DATA>'):
+        # Raw JSON escapes Windows backslashes, unlike decoded reply values.
+        def normalized_text(text, data_dir):
+            for spelling in (data_dir, os.path.normcase(data_dir)):
+                text = text.replace(json.dumps(spelling, ensure_ascii=False)[1:-1], '<DATA>')
+            return text
+        if not problems and normalized_text(raw_left, self.python.data_dir) != normalized_text(raw_right, self.go.data_dir):
             problems.append('catalog.json text differs (formatting)')
         for problem in problems:
             print('CATALOG', problem)

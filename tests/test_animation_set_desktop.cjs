@@ -137,7 +137,8 @@ const report = {passed:false, executable, scratch, hidden:true, qaOnlyNoSandbox:
   assert.equal(queued[0].entityPath,entity);assert.equal(queued[0].rootPath,assets);
   assert.deepEqual(queued[0].assignments,assignments,'The native queue stores both object animations and their source paths.');
   assert.equal(await page.locator('#animation-set-name').inputValue(),'Gameplay1P_');
-  await page.screenshot({path:path.join(scratch,'native-animation-set.png')});
+  const capture=await application.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
+  fs.writeFileSync(path.join(scratch,'native-animation-set.png'),Buffer.from(capture,'base64'));
   await page.locator('#fbx-options-button').dispatchEvent('click');
   assert.equal(await page.locator('#export-menu').isVisible(),true);
   assert.equal(await page.locator('#export-queue-list .export-queue-row').count(),1);
@@ -157,7 +158,8 @@ const report = {passed:false, executable, scratch, hidden:true, qaOnlyNoSandbox:
   assert.equal(await page.locator('#animation-set .animation-set-row').count(),2,'Failed native export keeps assignments for retry.');
   assert.equal(fs.existsSync(output)&&fs.readdirSync(output).some(name=>/\.c4d$/i.test(name)),false,'No scene is claimed or saved without Cinema.');
   assert.equal(fs.existsSync(path.join(bridgeQueue,'jobs')),false,'Disconnected check launches no bridge jobs.');
-  await page.screenshot({path:path.join(scratch,'native-export-queue-failed.png')});
+  const failedCapture=await application.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
+  fs.writeFileSync(path.join(scratch,'native-export-queue-failed.png'),Buffer.from(failedCapture,'base64'));
   await page.locator('#close-export-menu').dispatchEvent('click');
   const closed=application.waitForEvent('close',{timeout:25000});
   await application.evaluate(({BrowserWindow})=>{BrowserWindow.getAllWindows()[0].close();});

@@ -288,8 +288,9 @@ func TestWriteJSONIsAtomicAndReadJSONEnforcesLimit(t *testing.T) {
 	if _, err := ReadJSON(path, 3); err != ErrTooLarge {
 		t.Fatalf("limit error %v", err)
 	}
-	if _, err := ReadJSON(filepath.Join(dir, "missing.json"), 10); err == nil ||
-		err.Error() != "[Errno 2] No such file or directory: '"+filepath.Join(dir, "missing.json")+"'" {
+	missing := filepath.Join(dir, "missing.json")
+	wantMissing := oracle.Exec(t, "from owpreview.c4d_bridge import read_json\nresult = read_json(args[0])", missing)
+	if _, err := ReadJSON(missing, 10); err == nil || err.Error() != wantMissing.Error {
 		t.Fatalf("missing error %v", err)
 	}
 	result := oracle.Exec(t, `

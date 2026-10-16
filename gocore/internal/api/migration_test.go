@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -69,6 +70,10 @@ func (s *migration) write(t *testing.T, path string, value map[string]any, order
 		}
 	}
 	data := []byte("{\n" + strings.Join(parts, ",\n") + "\n}")
+	// Match the reference fixture's Path.write_text newline conversion.
+	if runtime.GOOS == "windows" {
+		data = []byte(strings.ReplaceAll(string(data), "\n", "\r\n"))
+	}
 	writeFile(t, path, data)
 	return data
 }
@@ -251,7 +256,7 @@ func TestNoLegacyCatalogStartsClean(t *testing.T) {
 	a := desktop(t, "")
 	restored := s.data(t, a)
 	assertJSON(t, restored["catalog"], map[string]any{})
-	if restored["browserMode"] != false || restored["appName"] != "Avolition" || restored["version"] != "0.8.23" {
+	if restored["browserMode"] != false || restored["appName"] != "Avolition" || restored["version"] != "0.8.24" {
 		t.Fatalf("bootstrap: %v", restored)
 	}
 	ok(t, call(t, a, "save_annotation", s.clip, s.annotation))

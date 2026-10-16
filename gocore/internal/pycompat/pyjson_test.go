@@ -5,11 +5,13 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"avolition/gocore/internal/oracle"
 )
 
 // TestLoadsTextMatchesPython compares values and error messages with CPython.
 func TestLoadsTextMatchesPython(t *testing.T) {
-	if _, err := exec.LookPath("python3"); err != nil {
+	if _, err := exec.LookPath(oracle.Interpreter()); err != nil {
 		t.Skip("python3 unavailable")
 	}
 	cases := []string{
@@ -27,7 +29,7 @@ for s in json.load(sys.stdin):
   except Exception as e: out.append({"ok":False,"e":str(e)})
 print(json.dumps(out))`
 	input, _ := json.Marshal(cases)
-	cmd := exec.Command("python3", "-c", code)
+	cmd := exec.Command(oracle.Interpreter(), "-X", "utf8", "-c", code)
 	cmd.Stdin = strings.NewReader(string(input))
 	out, err := cmd.Output()
 	if err != nil {

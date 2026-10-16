@@ -410,7 +410,7 @@ func TestCatalogPreservesUnknownKeysOrderAndFormatting(t *testing.T) {
 	writeFile(t, filepath.Join(profile, "catalog.json"), []byte(saved))
 	a := newAPI(t, Options{DataDir: profile})
 	ok(t, call(t, a, "save_annotation", "/clip.owanimclip", map[string]any{"name": "x"}))
-	got := string(readBytes(t, filepath.Join(profile, "catalog.json")))
+	got := strings.ReplaceAll(string(readBytes(t, filepath.Join(profile, "catalog.json"))), "\r\n", "\n")
 	value, err := pycompat.LoadsText(saved)
 	if err != nil {
 		t.Fatal(err)

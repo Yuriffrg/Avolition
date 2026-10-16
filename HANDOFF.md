@@ -1,4 +1,6 @@
-# Handoff: 0.8.23, the Go backend
+# Handoff: 0.8.24, PNG export compatibility
+
+Windows follow-up: see `VALIDATION.md` for native build, renderer, real-map, game-extraction and differential results. Version 0.8.24 fixes publishing Go-baked PNGs over equivalent Python-baked textures. The actual Colosseo map now exports successfully through live C4D/Octane, with all existing output files preserved. The broader Windows Go suite still has unresolved compatibility-test failures. The Linux results below are not a Windows release sign-off.
 
 This release replaces the Python backend of 0.8.22 with a Go backend. The
 interface, saved settings, export list, file formats and Cinema 4D bridge are
@@ -90,9 +92,12 @@ first, so state changes keep Python's strict order.
   stored in a Float32Array. Some reply key orders differ; `catalog.json` is
   byte-identical.
 - PNG files (texture previews and baked `tex/*.png`) decode to identical pixels
-  but compress differently, so their bytes differ. Re-exporting with Go into a
-  folder that already holds Python-baked textures of the same name produces
-  `_2` names instead of reusing them.
+  but compress differently, so their bytes differ. Since 0.8.24, bundle publication
+  reuses existing metadata-free PNGs when their headers and decoded pixels match
+  exactly. This fixes map exports into pre-Go output folders while preserving
+  their original bytes and timestamps. Different pixels, precision, metadata or
+  corrupt files still fail safely; scene and clip comparison remains byte-exact.
+  Direct texture baking still allocates `_2` names on differing bytes.
 - JPEG textures decode within 3 levels of Pillow (Go's IDCT differs);
   JPEG-compressed TIFFs are not supported. All other formats are bit-identical
   to Pillow 12.3.

@@ -253,7 +253,8 @@ func TestMissingFileMessageMatchesPython(t *testing.T) {
 	rows := []Clip{f.clip("001.owanimclip", nil), f.clip("002.owanimclip", nil)}
 	os.Remove(rows[1].Path)
 	_, warnings := New(DefaultMaxEntries).Annotate(rows)
-	want := fmt.Sprintf("Could not check duplicates for %s: [Errno 2] No such file or directory: '%s'", rows[1].Path, rows[1].Path)
+	missing := oracle.Exec(t, "from pathlib import Path\nresult = Path(args[0]).stat()", rows[1].Path)
+	want := fmt.Sprintf("Could not check duplicates for %s: %s", rows[1].Path, missing.Error)
 	if len(warnings) != 1 || warnings[0] != want {
 		t.Fatalf("%q\nwant %q", warnings, want)
 	}

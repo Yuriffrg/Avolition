@@ -3,6 +3,10 @@ from pathlib import Path
 import errno
 import shutil
 import tempfile
+import io
+import struct
+
+from PIL import Image
 
 
 DEFAULT_FBX_OPTIONS = {'enabled': False, 'upAxis': 'Y', 'includeMesh': True,
@@ -40,16 +44,58 @@ def same_bytes(source, destination):
                 return True
 
 
+def _plain_png_header(data):
+    """Only our metadata-free baked PNGs may use pixel-based reuse."""
+    if len(data) < 33 or data[:8] != b'\x89PNG\r\n\x1a\n':
+        return None
+    pos, header = 8, None
+    while pos + 12 <= len(data):
+        size = struct.unpack('>I', data[pos:pos + 4])[0]
+        end = pos + 12 + size
+        if end > len(data):
+            return None
+        kind = data[pos + 4:pos + 8]
+        if kind == b'IHDR':
+            if pos != 8 or size != 13:
+                return None
+            header = data[pos + 8:pos + 21]
+        elif kind == b'IEND':
+            return header if size == 0 and end == len(data) else None
+        elif kind != b'IDAT':
+            return None
+        pos = end
+    return None
+
+
+def _same_published_content(source, destination):
+    if same_bytes(source, destination):
+        return True
+    if source.suffix.lower() != '.png' or not destination.is_file():
+        return False
+    left, right = source.read_bytes(), destination.read_bytes()
+    header = _plain_png_header(left)
+    if header is None or header != _plain_png_header(right):
+        return False
+    try:
+        for data in (left, right):
+            with Image.open(io.BytesIO(data)) as image:
+                image.verify()
+        with Image.open(io.BytesIO(left)) as a, Image.open(io.BytesIO(right)) as b:
+            return (a.mode, a.size, a.tobytes()) == (b.mode, b.size, b.tobytes())
+    except (OSError, ValueError, SyntaxError):
+        return False
+
+
 def _publish(source, destination, created):
     """Exclusive create, tracking only files owned by this transaction."""
     if destination.exists():
-        if same_bytes(source, destination):
+        if _same_published_content(source, destination):
             return False
         raise FileExistsError(errno.EEXIST, 'An existing file has different content', str(destination))
     try:
         handle = destination.open('xb')
     except FileExistsError:
-        if same_bytes(source, destination):
+        if _same_published_content(source, destination):
             return False
         raise
     created.append(destination)

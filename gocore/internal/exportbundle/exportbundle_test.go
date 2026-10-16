@@ -236,7 +236,8 @@ func TestChangedExistingTextureCausesErrorWithoutOverwriting(t *testing.T) {
 	if !errors.As(err, &exists) || !errors.Is(err, os.ErrExist) {
 		t.Fatal(err)
 	}
-	if err.Error() != "[Errno 17] An existing file has different content: '"+prior+"'" {
+	wantError := oracle.Exec(t, "raise FileExistsError(17, 'An existing file has different content', args[0])", prior)
+	if err.Error() != wantError.Error {
 		t.Fatal(err)
 	}
 	if read(t, prior) != "Edited by user" {
@@ -647,8 +648,8 @@ func TestExportBundleMatchesPython(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := strings.ReplaceAll(string(python.Steps[i]), pyRoot, "<root>")
-		got := strings.ReplaceAll(string(data), goRoot, "<root>")
+		want := oracle.ReplaceJSONPath(string(python.Steps[i]), pyRoot, "<root>")
+		got := oracle.ReplaceJSONPath(string(data), goRoot, "<root>")
 		jsoncmp.Equal(t, json.RawMessage(want), json.RawMessage(got), jsoncmp.Options{})
 		var a, b ordered.Map[any]
 		_ = json.Unmarshal([]byte(want), &a)

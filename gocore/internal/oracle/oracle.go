@@ -11,9 +11,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 )
+
+// ReplaceJSONPath substitutes an isolated fixture root inside encoded JSON.
+// Windows separators are escaped in JSON, so replacing the raw path misses them.
+func ReplaceJSONPath(text, oldPath, newPath string) string {
+	oldJSON, _ := json.Marshal(oldPath)
+	newJSON, _ := json.Marshal(newPath)
+	return strings.ReplaceAll(text, string(oldJSON[1:len(oldJSON)-1]), string(newJSON[1:len(newJSON)-1]))
+}
 
 var (
 	checkOnce sync.Once
@@ -25,7 +34,8 @@ func script() string {
 	return filepath.Join(filepath.Dir(file), "..", "..", "oracle", "oracle.py")
 }
 
-func interpreter() string {
+// Interpreter honors the same Python override in every reference test.
+func Interpreter() string {
 	if value := os.Getenv("AVOLITION_PYTHON"); value != "" {
 		return value
 	}
@@ -39,7 +49,7 @@ func Available() error {
 			checkErr = err
 			return
 		}
-		checkErr = exec.Command(interpreter(), "-c", "import numpy, PIL").Run()
+		checkErr = exec.Command(Interpreter(), "-X", "utf8", "-c", "import numpy, PIL").Run()
 	})
 	return checkErr
 }
@@ -87,7 +97,8 @@ func run(t testing.TB, request map[string]any) Result {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(interpreter(), "-I", script())
+	// -I ignores PYTHONUTF8; select UTF-8 explicitly for Windows pipe I/O.
+	cmd := exec.Command(Interpreter(), "-I", "-X", "utf8", script())
 	cmd.Stdin = bytes.NewReader(input)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr

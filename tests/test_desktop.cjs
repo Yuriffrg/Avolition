@@ -77,7 +77,7 @@ async function launch() {
   assert.equal(native.nodeIntegration, false);
   assert.equal(await page.title(), 'Avolition');
   assert.equal(await page.locator('#app-logo, .avolition-empty-logo, .empty-note').count(), 0);
-  assert.equal(await page.locator('.local-badge .version').innerText(), 'v0.8.23');
+  assert.equal(await page.locator('.local-badge .version').innerText(), 'v0.8.24');
   assert.equal(await page.locator('#clip-notes').count(), 0);
   assert.equal(await page.locator('#export-fbx, #fbx-up-axis').count(), 0);
   assert.equal(await page.locator('#clip-name, #export-clip, #export-c4d, #track-groups, #track-count-filter').count(), 0);

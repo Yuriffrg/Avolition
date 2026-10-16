@@ -174,7 +174,7 @@ func exists(path string) bool {
 // transaction. It reports whether a new file was written (false: reused).
 func publish(source, destination string, created *[]string) (bool, error) {
 	if exists(destination) {
-		same, err := SameBytes(source, destination)
+		same, err := samePublishedContent(source, destination)
 		if err != nil {
 			return false, err
 		}
@@ -186,7 +186,7 @@ func publish(source, destination string, created *[]string) (bool, error) {
 	handle, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o666)
 	if err != nil {
 		if errors.Is(err, fs.ErrExist) {
-			same, sameErr := SameBytes(source, destination)
+			same, sameErr := samePublishedContent(source, destination)
 			if sameErr != nil {
 				return false, sameErr
 			}

@@ -185,8 +185,10 @@ func TestOracleWorkflowPaths(t *testing.T) {
 		map[string]any{"overwatchInstall": "", "outputDirectory": ""},
 		map[string]any{"unknown": 1, "activeTab": "toolchain"},
 	}
+	rootJSON, _ := json.Marshal(root)
+	quotedRoot := string(rootJSON[1 : len(rootJSON)-1])
 	catalogs := []string{`{}`, `{"workflow": "broken"}`, `{"workflow": {"overwatchInstall": 5, "outputDirectory": null, "activeTab": 3, "toolchainTab": "maps"}}`,
-		`{"libraryPath": "` + root + `/Lib Path", "lastRoot": "/elsewhere"}`, `{"libraryDirectory": "", "libraryPath": "` + root + `/Lib"}`,
+		`{"libraryPath": "` + quotedRoot + `/Lib Path", "lastRoot": "/elsewhere"}`, `{"libraryDirectory": "", "libraryPath": "` + quotedRoot + `/Lib"}`,
 		`{"z": 1, "workflow": {"extra": true}, "a": 2}`}
 	code := `
 import json

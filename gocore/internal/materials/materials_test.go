@@ -502,6 +502,10 @@ func TestGenerateMaterialDemoMatchesFixture(t *testing.T) {
 		rel, _ := filepath.Rel(fixture, path)
 		want, _ := os.ReadFile(path)
 		got, readErr := os.ReadFile(filepath.Join(root, rel))
+		if strings.HasSuffix(rel, ".txt") {
+			want = []byte(strings.ReplaceAll(string(want), "\r\n", "\n"))
+			got = []byte(strings.ReplaceAll(string(got), "\r\n", "\n"))
+		}
 		if readErr != nil || string(got) != string(want) {
 			t.Errorf("%s differs from the generated fixture (%v)", rel, readErr)
 		}

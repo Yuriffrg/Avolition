@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +22,9 @@ func buildCore(t *testing.T) (binary, repo string) {
 		t.Fatal(err)
 	}
 	binary = filepath.Join(t.TempDir(), "owio-core")
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
 	if out, err := exec.Command("go", "build", "-o", binary, ".").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
@@ -123,7 +127,7 @@ func TestSelfTestReport(t *testing.T) {
 	if checks["ok"] != true || checks["scan"].(map[string]any)["ok"] != true || checks["bootstrap"].(map[string]any)["ok"] != true {
 		t.Fatalf("report: %.300s", data)
 	}
-	if !strings.HasPrefix(string(data), "{\n  \"ok\": true,\n  \"bootstrap\": {\n    \"ok\": true,") {
+	if !strings.HasPrefix(strings.ReplaceAll(string(data), "\r\n", "\n"), "{\n  \"ok\": true,\n  \"bootstrap\": {\n    \"ok\": true,") {
 		t.Fatalf("formatting: %.200s", data)
 	}
 }

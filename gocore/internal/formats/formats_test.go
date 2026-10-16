@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io/fs"
 	"math"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -441,8 +442,9 @@ func TestUnknownTrackSkippedAndDurationExtended(t *testing.T) {
 
 func TestMissingFileAndExtension(t *testing.T) {
 	f := newFixture(t)
-	_, err := formats.LoadAsset(f.root+"/nothing.owmdl", "")
-	if !errors.Is(err, fs.ErrNotExist) || err.Error() != "File not found: "+f.root+"/nothing.owmdl" {
+	missing := filepath.Join(f.root, "nothing.owmdl")
+	_, err := formats.LoadAsset(missing, "")
+	if !errors.Is(err, fs.ErrNotExist) || err.Error() != "File not found: "+missing {
 		t.Fatalf("got %v", err)
 	}
 	_, err = formats.LoadAsset(f.root+"/x.txt", "")

@@ -7,6 +7,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -41,7 +42,7 @@ func execute(t *testing.T, cmd *exec.Cmd, dir, output string) run {
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	cmd.Env = append(os.Environ(), "COLUMNS=80", "ANALYZE_LIBRARY_RUN_MAIN=1")
 	err := cmd.Run()
-	result := run{stdout: stdout.String(), stderr: stderr.String()}
+	result := run{stdout: strings.ReplaceAll(stdout.String(), "\r\n", "\n"), stderr: strings.ReplaceAll(stderr.String(), "\r\n", "\n")}
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
 		result.code = exit.ExitCode()
@@ -49,7 +50,7 @@ func execute(t *testing.T, cmd *exec.Cmd, dir, output string) run {
 		t.Fatal(err)
 	}
 	if data, err := os.ReadFile(output); err == nil {
-		result.report = analyzedAt.ReplaceAllString(string(data), `"analyzedAt": ""`)
+		result.report = analyzedAt.ReplaceAllString(strings.ReplaceAll(string(data), "\r\n", "\n"), `"analyzedAt": ""`)
 		os.Remove(output)
 	}
 	return result
@@ -68,7 +69,8 @@ func TestCommandMatchesPython(t *testing.T) {
 	dir := t.TempDir()
 	demo := filepath.Join(repo, "tests", "demo-assets")
 	catalog := filepath.Join(dir, "catalog.json")
-	os.WriteFile(catalog, []byte(`{"annotations": {"`+filepath.Join(demo, "Animations", "x")+`": {"name": "日本"}}, "other": 1.50}`), 0o644)
+	clipKey, _ := json.Marshal(filepath.Join(demo, "Animations", "x"))
+	os.WriteFile(catalog, []byte(`{"annotations": {`+string(clipKey)+`: {"name": "日本"}}, "other": 1.50}`), 0o644)
 	noAnnotations := filepath.Join(dir, "no-annotations.json")
 	os.WriteFile(noAnnotations, []byte(`{"other": 1}`), 0o644)
 	listAnnotations := filepath.Join(dir, "list-annotations.json")
@@ -94,7 +96,7 @@ func TestCommandMatchesPython(t *testing.T) {
 	}
 	for _, args := range cases {
 		label := strings.Join(args, " ")
-		want := execute(t, exec.Command("python3", append([]string{script}, args...)...), dir, output)
+		want := execute(t, exec.Command(oracle.Interpreter(), append([]string{"-X", "utf8", script}, args...)...), dir, output)
 		cmd := &exec.Cmd{Path: self, Args: append([]string{"analyze_library.py"}, args...)}
 		got := execute(t, cmd, dir, output)
 		if want.code != got.code || want.stdout != got.stdout || want.stderr != got.stderr || want.report != got.report {

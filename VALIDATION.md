@@ -1,4 +1,63 @@
-# Avolition 0.8.23 validation
+# Avolition 0.8.24 validation
+
+## Map export PNG regression (2026-10-15)
+
+The 0.8.23 Go PNG encoder produces different compressed bytes from the earlier
+Python encoder. Texture names still match, but staged bundle publication used
+byte-only comparison and aborted after native scene creation. Re-baking the
+reported Colosseo Evening - Push map found 359 matching existing filenames;
+all 359 had identical decoded pixels, but different bytes. The reported
+`011ea86ecb16f42c10eea4d0_ao.png` was 417,586 bytes (old) versus 533,336 (Go).
+
+Both Go and the Python reference now reuse metadata-free PNGs only when the
+IHDR and decoded samples match exactly. Other files remain byte-compared.
+Tests cover compression differences, 8/16-bit samples, transparency including
+hidden RGB, changed pixels, metadata, corruption, and failed-publication cleanup.
+Existing texture bytes and timestamps are preserved.
+
+- Live Cinema 4D 2026 / Octane / bridge 0.7.5 exported the actual Colosseo
+  Evening - Push map to `C:\Users\Admin\Desktop\maps\Colosseo.c4d` in 64.142 seconds.
+  Native build/save/reload verification completed; the published file is
+  615,240,487 bytes with 2,111 texture dependencies. All 3,184 pre-existing
+  output files retained their SHA-256 and modification timestamp. This resolves
+  the earlier environment-blocked live map export check, not every outstanding
+  Go compatibility issue listed in the historical section below.
+- New Go PNG regressions and all non-oracle exportbundle tests pass; the
+  existing `TestExportBundleMatchesPython` still fails its Windows error-text
+  comparisons. `go vet ./...` and Windows `go build ./...` pass.
+- 474 Python tests and all 17 Node test entries pass. Differential replay on
+  demo/material assets: 197 replies, zero differences.
+- The packaged 0.8.24 Electron desktop regression test passes, including animation
+  preview, export-manager behavior, persistence and isolated native dialogs.
+
+Evidence: `../preview-build/go-verification/map-collision-live-report.json` and
+`../preview-build/desktop-regression-mBbSmC/`. Portable build:
+`../preview-build/avolition-v0824/dist/Avolition/Avolition.exe`.
+
+## Windows verification of the Go rewrite (2026-10-15)
+
+Pulled `origin/main` through `56f3a43` (from `12d78bc`) and built the portable Windows app using Go 1.24.13, Electron 44.4.3, and the existing packaging dependencies. This is a **test build, not a complete release sign-off**. The installed desktop application was not replaced and these verification changes have not been pushed.
+
+Passed on Windows:
+
+- `go vet ./...` and the native Windows Go build; `build.ps1` produced the full portable application with the Go backend and the bundled C4D bridge.
+- All 473 Python reference tests and all 17 Node test entries, including binary frame transport, compressed textures and map batching.
+- Packaged desktop, toolchain desktop, animation setup/export queue, model browser integration and maps integration tests. These exercise the real Go backend, native IPC, persistent settings, Unicode paths, library separation, renaming, model sorting, independent animations and failure recovery. Native export success is not implied by these UI tests.
+- Thirteen additional browser suites against Go: textures, compressed textures (BC7/BC3/BC1), export queue, object search, objects, object hierarchy, map library, map export, model browser, object renaming, lazy hierarchy, toolchain maps and toolchain. Browser processes used an external test launcher adapter; no Python backend handled their app requests.
+- Differential replay against the Python reference: 207 replies for the two example libraries and 66 replies for a freshly extracted Genji victory pose, with zero differences, including saved catalogs.
+- Actual DataTool v2.25.0.0+1151 launched by Go against the installed Steam game: loaded 54 heroes and 305 map records, then extracted Genji's All-Out Attack victory pose into isolated test output (7 files, including an animation clip). No full map extraction was repeated.
+- Real Colosseo / Night - Push preview: 5,611 objects, 7,725 retained meshes, 7,482 textured bindings and no missing available compatible texture roles. Original source inventory and map hash were unchanged. Compared with the existing 0.8.22 Python build on the same map, one run loaded in 49.5 seconds versus 75.4 seconds and used 1,770 versus 7,829 draw calls. These are single automated runs; hidden-window frame timing is not a reliable interactive FPS benchmark.
+
+Unresolved checks:
+
+- The full Go suite is **not green**. The final bounded sweep recorded 616 passing, 11 failing and 11 skipped test events, plus a map-export integration timeout; it was stopped after 150 seconds. These are observed events, not a claim that every test completed. Failing tests: `TestCommandMatchesPython`, `TestLibmMatchesPython`, `TestExportBundleMatchesPython`, `TestOracleErrorMessages`, `TestOraclePosixResolve`, `TestLoadsTextMatchesPython`, `TestOracleBakeEdgeCases`, `TestOracleReadOWMat`, `TestBridgeHandoffWithPythonService`, `TestBridgeNativeFailureDoesNotLeaveAnOutput`, and `TestOracleScanMaps`.
+- Remaining differences include Windows dangling-link/path resolution, OS error wording/types, invalid-JSON messages that vary by Python version, text normalization in error comparisons, and one-ULP trigonometric differences from Windows Python. The successful material-baking comparison covers valid material inputs; its failure-path oracle still differs. Bridge integration tests also encountered intermittent atomic status-file replacement failures, and the map bridge test timed out. These failures were retained rather than disabled or declared harmless wholesale.
+- The live Cinema 4D 2026 bridge reported version 0.7.5, Octane and map support. However, this execution environment denied the atomic `payload.tmp` to `payload.json` rename in its mailbox, even after write grants. A plain PowerShell rename reproduced the denial. No live native scene was exported, reopened or verified in this run. The permission failure does not establish that a normal desktop launch will fail, but native C4D/Octane export remains unverified.
+- Windows `-race` could not build because no GCC-compatible C compiler is installed. Optional large benchmarks and exhaustive tests skipped under `-short` were not counted as passing.
+
+Local fixes made while verifying: force UTF-8 for Python oracle pipes, honor `AVOLITION_PYTHON` consistently, escape Windows fixture paths correctly, compare native text line endings correctly, include `.exe` on test executables, capture hidden Electron windows through `webContents.capturePage()`, allow the real-map test to select the supplied map, and exclude `.git` from packaged source. No renderer or Go production behavior was changed.
+
+Evidence and portable test build are in the sibling `preview-build/go-verification/` directory. Key evidence: `go-suite-result.jsonl`, `go-suite-exit.txt`, `vet-final.log`, `python-tests-windows.log`, `node-tests.log`, `difftest-fixed.log`, `difftest-real-extraction.log`, `live-toolchain-report.json`, `live-export.log`, and the desktop/UI logs. Real-map reports and screenshots are in `preview-build/real-map-ui-MJQ5uP/` (Go) and `preview-build/real-map-ui-rlA5e8/` (Python baseline). The app is `go-verification/build/dist/Avolition/Avolition.exe`.
 
 ## Go backend (2026-10-15)
 

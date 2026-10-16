@@ -292,7 +292,7 @@ func compareExport(t *testing.T, mapPath string, bake, light bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := strings.ReplaceAll(string(python.Result), pyOut, goOut)
+	want := oracle.ReplaceJSONPath(string(python.Result), pyOut, goOut)
 	jsoncmp.Equal(t, json.RawMessage(want), json.RawMessage(got), jsoncmp.Options{})
 	jsoncmp.Equal(t, python.Report, seen.Report, jsoncmp.Options{})
 	if fmt.Sprint(python.Textures) != fmt.Sprint(seen.Textures) {
@@ -302,8 +302,8 @@ func compareExport(t *testing.T, mapPath string, bake, light bool) {
 	// side's own staging folder.
 	pyPayload := stage.ReplaceAllString(string(python.Payload), ".stage")
 	goPayload := stage.ReplaceAllString(string(seen.Payload), ".stage")
-	pyPayload = strings.ReplaceAll(pyPayload, pyOut, "OUT")
-	goPayload = strings.ReplaceAll(strings.ReplaceAll(goPayload, goOut, "OUT"), queue, "QUEUE")
+	pyPayload = oracle.ReplaceJSONPath(pyPayload, pyOut, "OUT")
+	goPayload = oracle.ReplaceJSONPath(oracle.ReplaceJSONPath(goPayload, goOut, "OUT"), queue, "QUEUE")
 	diffs, err := jsoncmp.Diff([]byte(pyPayload), []byte(goPayload), jsoncmp.Options{RelTol: 1e-6, AbsTol: 1e-6,
 		Ignore: []string{".path"}})
 	if err != nil {

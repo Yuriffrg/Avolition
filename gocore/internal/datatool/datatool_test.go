@@ -200,7 +200,7 @@ func TestCatalogExecutesRealSubprocessesAndReadsJSON(t *testing.T) {
 	if len(catalogDirs(t, f)) != 0 {
 		t.Fatal("temporary catalog folder left")
 	}
-	if asJSON(result.Result) != `{"heroCount":1,"install":"`+f.game+`","workflow":"heroes"}` {
+	if asJSON(result.Result) != `{"heroCount":1,"install":`+asJSON(f.game)+`,"workflow":"heroes"}` {
 		t.Fatal(asJSON(result.Result))
 	}
 	unlocks, _ := result.Catalog.Unlocks.Get("Lúcio")
