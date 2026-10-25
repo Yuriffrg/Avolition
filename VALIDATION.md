@@ -1,4 +1,208 @@
-# Avolition 0.8.24 validation
+# Avolition 0.8.29 validation
+
+## Gameplay1P clavicle height offsets (2026-10-25)
+
+- Real packaged-Go exports in native Cinema 4D 2026/Octane passed for 22-frame
+  arms-only and 50-frame arms/weapon setups. Both clavicles start at local Y=0.
+  Compared against the saved 0.8.28 scenes, every new Y key equals its old value
+  minus that clavicle's first key, with zero measured difference. Offsets were
+  144.62688199262166 cm (left) and 144.6273104030392 cm (right). All key times and
+  X/Z/rotation curves match the prior exports.
+- Every retained object's pose matches its expected per-arm world translation.
+  Original skin weights and bind rest matrices remain unchanged; 55,119 deformed
+  vertex samples match their expected skin-weighted translation in each export.
+  Both scenes reopen with one Reload source/clip on Layer 0 and no scale tracks.
+  The static map, independent-rig and 60 FPS regressions also pass.
+- All 512 Python tests, 18 Node entries, packaged desktop/animation-set checks,
+  focused Go API/export/bridge/map tests, go vet and go build pass. Known Windows
+  external-service oracle race exclusions remain; two opt-in benchmarks skip.
+  New regression coverage includes unequal left/right offsets, changing Y,
+  preserved other channels, mixed arm weights and already-direct/static roots.
+- Native evidence: `../preview-build/avolition-v0829-qa/real-native-export-report.json`.
+  Test logs and package checks are in the same QA directory.
+- Installed bridge 0.7.10 has all nine files verified against the tested bundle.
+  After restart it advertised povHeightZero and Octane availability. A persisted
+  Widowmaker arms/weapon queue setup and an independent-rig fixture exported
+  successfully through it. Installed verification and backup details are in
+  `installed-export-report.json` and `plugin-install-report.json` in that folder.
+
+The earlier validation records below describe their respective releases.
+
+## Gameplay1P rig cleanup and exact frames (2026-10-25)
+
+- The packaged Go backend exported real Widowmaker arms-only and combined
+  arms/weapon setups through an isolated native Cinema 4D 2026/Octane service.
+  Saved scenes reopen with the hero root `Widowmaker`, a Motion System on `Joints`,
+  and exactly `Clavicle_L`/`Clavicle_R` directly beneath it. Each has one `Reload`
+  source and clip on `Layer 0`, and no scale tracks.
+- The combined scene has 5 meshes, 92 joints and 546 position/rotation tracks.
+  The camera-only 42-vertex cards, 13 unused joints and three empty helper nulls
+  are omitted. All 50 frames preserve the retained objects' original world
+  transforms. Original skin weights/bind states match, and 55,119 deformed vertex
+  samples (all retained meshes at start/mid/end) match across hierarchy cleanup.
+- Source, clip, document/preview endpoints and every saved key use exact frame
+  times: real 30 FPS combined export ends at 49 F; the 60 FPS fixture ends at
+  29 F. Two independent-rig fixtures still pass. The static map regression keeps
+  24 FPS, current/minimum 0 F and maximum 1 F, with no invented animation tracks.
+- Packaged desktop and animation-set workflows pass without renderer errors,
+  along with all 510 Python tests, 18 Node test entries, focused Go API/bridge/export/map tests,
+  `go vet ./...` and `go build ./...`. Existing broader Windows oracle limitations
+  below are unchanged. Native evidence:
+  `../preview-build/avolition-v0828-qa/real-native-export-report.json`.
+- Bridge 0.7.9 is installed after the user closed Cinema 4D. All nine files match
+  the tested bundle; 0.7.8 is backed up outside plugin search paths. After restart,
+  the installed bridge advertised both new capabilities and Octane availability.
+  A real saved Widowmaker arms/weapon queue entry exported successfully, and the
+  independent-rig fixture passed native save/reload checks again. Evidence:
+  `../preview-build/avolition-v0828-qa/installed-export-report.json` and
+  `plugin-install-report.json` in the same folder.
+
+The earlier validation records below describe their respective releases.
+
+## One combined motion source and exact nickname (2026-10-25)
+
+- Real packaged-Go exports through native Cinema 4D 2026/Octane passed save/reload:
+  arms alone and arms plus weapon both contain exactly one source `Reload`, one
+  clip `Reload`, one `Layer 0`, and one Motion System on `00000000013E_Skeleton`.
+  The combined scene retains 624 position/rotation tracks and zero scale tracks.
+  Its filename remains `Gameplay1P_Reload.c4d` independently of the motion name.
+- Two independent-rig fixtures (shared entity and separate document roots) also
+  pass. Each uses one `Joints` owner, one `Reload` source/clip and `Layer 0`.
+  Grouping preserves world transforms; tests include rotated/translated parents,
+  static nonunit scale, skin links and an unassigned nested attachment.
+- Native NLA has tiny translation rounding at large world offsets. Translation
+  verification uses relative vector magnitude instead of separate axis magnitudes
+  to handle cancellation near zero; orientation/scale basis checks remain strict.
+  Regression tests reject meaningful pose changes, nonfinite values and drift
+  near the origin.
+- Nickname UI/API tests pass for `Reload`, Unicode, underscores, explicit entity
+  prefixes and legacy queue names, including persisted backend restart and frozen
+  queue snapshots. Go/Python payload builders and optimized JSON retain the name.
+- All 497 Python tests and 18 Node entries pass. Focused Go API/export/bridge tests,
+  `go vet ./...` and `go build ./...` pass. Differential replay compares 207 replies
+  with no differences. Packaged desktop and animation-set smoke tests pass without
+  renderer errors. Existing Windows external-service oracle exclusions still apply.
+- Bridge 0.7.8 was installed while Cinema 4D was closed, with all eight files
+  verified and 0.7.7 backed up outside the plugin search path. After restart, the
+  packaged Go app exported a persisted `Reload` queue entry through the installed
+  bridge. A native independent-rig fixture also returned one named source/clip.
+
+Evidence: `../preview-build/avolition-v0827-qa/real-native-export-report.json`,
+`installed-export-report.json`, `plugin-install-report.json`, `python-full.log`,
+`node-tests.log`, `go-api-c4dexport-final.jsonl`, `go-bridge.log`, `difftest.log`,
+`export-queue-nickname-ui.log`, `desktop-smoke.log`, and `animation-set-desktop.log`.
+Historical Go-suite limitations below remain; a wholly green Go suite is not claimed.
+
+## Avolition 0.8.26 validation (historical)
+
+## Skeleton motion clips and scale-key removal (2026-10-25)
+
+Real Go-to-Cinema 4D 2026 / Octane exports passed through a temporary isolated
+bridge using 0.7.7 source. All checks saved and reopened detached documents and
+left the user's active document unchanged.
+
+- Widowmaker Gameplay1P with one assigned clip: the sole Motion System tag is on
+  `00000000013E_Skeleton`; the source contains exactly that null and its 85 joints.
+  The saved scene has 510 position/rotation tracks and zero scale tracks.
+- With arms and weapon assigned: tags are on `00000000013E_Skeleton` and
+  `0000000001D4_Skeleton`, with separate named sources/clips, 624 position/rotation
+  tracks and zero scale tracks. Source hierarchies contain 106 nodes total and no
+  attached meshes or unassigned third rig. Native sampled poses survive conversion
+  and save/reload.
+- Static-map regression: 24 FPS, current/minimum/preview minimum 0 F, range end
+  exactly 1 F, no animation tracks or motion clips.
+- Nonunit first-frame scale remains static. The actual tested arms clip changes
+  `bone_00DE` scale later; this change is intentionally omitted and reported in
+  export warnings. Tests also distinguish first-frame scale from rest/last-frame
+  values and cover nested/renamed skeletons and corrupted saved scale tracks.
+
+- Bridge 0.7.7 was installed while Cinema 4D was closed. All eight files match the
+  packaged bundle, and 0.7.6 was backed up outside the plugin search path. After
+  restart, the packaged Go app connected to the new capability and exported an
+  animation (469,749 bytes) and map (127,668 bytes) through the installed bridge.
+- All 489 Python tests pass. Focused Go export/bridge/map/API suites pass with the
+  existing external-Python-service race tests excluded. `go vet ./...` and
+  `go build ./...` pass. Packaged-Go/Python differential replay compares 207
+  replies with no differences. The packaged desktop smoke passes without
+  renderer errors; packaged scene/motion modules match repository hashes.
+
+Evidence: `../preview-build/avolition-v0826-qa/real-native-export-report.json`,
+`native-real.log`, `installed-export-report.json`, `plugin-install-report.json`,
+`python-full.log`, `go-c4dexport-final.jsonl`, `go-c4dbridge-final.jsonl`,
+`difftest.log`, and `desktop-smoke.log`. Existing Windows oracle limitations in
+historical sections still apply; the entire Go suite is not claimed green.
+
+## Avolition 0.8.25 validation (historical)
+
+## POV preview, animation suggestions and native export (2026-10-25)
+
+The Animations viewport adds an off-by-default POV camera attached to the entity's
+animated Camera joint. It preserves/restores orbit navigation, follows the owning
+arms camera when an attached weapon is selected, and leaves unsupported entities
+and map viewports in ordinary orbit mode. It does not change export-source bones
+or export a camera. Duration matching is a tie-breaker after existing source/bone
+relevance in **For selected object** sorting; it uses a different assigned object's
+clip, preferably the parent rig, and accepts a one-frame duration difference across
+FPS values. Other sort modes are unchanged.
+
+Cinema 4D animation exports now create native Motion Clips and Sources using the
+export name. Position, Rotation and Parameter tracks move into the source; Scale
+and PLA stay on the original hierarchy. Bake Expressions and Create Pictures are
+off. Verification compares original and motion-system poses before saving, then
+checks poses, source tracks, clip links and timing again after native reload.
+Static maps use 24 FPS with current time and both range minima at 0 F. Their ranges
+end at 1 F: native Cinema 4D changes a zero-length 0–0 F range to −1–0 F, so an exact
+one-frame end is required to preserve the requested zero minima.
+
+- **Real Go → Cinema 4D 2026 / Octane exports passed.** Widowmaker Gameplay1P,
+  exported as `ADS UP Widowmaker`, retained 6 meshes, 105 bones and all 765 tracks
+  over 22 frames at 30 FPS. Its single named motion source contains 510 included
+  tracks; 255 scale tracks remain outside it. Native save/reload and sampled poses
+  passed (`verifiedNativeScene: true`).
+- Full Colosseo export retained 7,725 meshes and 1,040 materials, producing a
+  615,240,487-byte C4D file. Native reload confirmed 24 FPS, current/minimum/preview
+  minimum 0, and maximum/preview maximum exactly 1/24 second. It has no animation
+  tracks or motion clips and also reports `verifiedNativeScene: true`.
+- Synthetic combined-animation and map exports also passed native save/reload.
+  `tests/test_c4d_scene.py`, `tests/test_combined_export.py` and
+  `tests/test_bridge_plugin_bundle.py` cover included/excluded channels, retained
+  animation, broken source links, altered timing and bundled bridge capabilities.
+- All **484 Python tests** and **18 Node test entries** pass. Feature regressions
+  include `tests/test_pov_camera.mjs` and `tests/test_clip_matching.mjs`.
+  `tests/test_duration_suggestions_ui.cjs` passed with real binary fixtures,
+  including selecting the weapon through the object tree, cross-FPS matching,
+  preserved explicit sorting, excluding its own assignment and clearing the
+  reference. Real Widowmaker POV captures are in `../preview-build/pov-verification/`;
+  the duration integration report is in
+  `../preview-build/duration-suggestions-caCn2m/report.json`.
+- The packaged 0.8.25 desktop and animation-setup/export-manager smoke tests pass
+  without renderer errors. Duration-suggestion browser integration also passes
+  against the packaged Go backend; logs are in `avolition-v0825-qa` below.
+- The four relevant Go packages (`c4dexport`, `c4dbridge`, `mapexport`, `api`) report
+  **230 passing and 2 skipped tests**. `go vet ./...` and `go build ./...` pass.
+  Packaged-Go differential replay compared 207 demo/material replies with the
+  Python reference and found zero differences.
+
+Native evidence is in
+`../preview-build/avolition-v0825-qa/real-native-export-report.json` and
+`live-export-report.json` in the same directory. Test/build evidence includes
+`python-full.log`, `go-relevant.jsonl`, `go-vet-final.log`, `go-build-final.log` and
+`difftest-final.log`. The large native jobs ran through a temporary isolated
+service using bridge 0.7.6 source. The installed plugin was then replaced while
+Cinema 4D was closed, with all eight files hash-verified and the old plugin backed
+up outside the plugin search path. After restart, the installed 0.7.6 bridge
+reported Octane, motion clip and map timing support. The packaged Go app exported
+`ADS UP.c4d` (626,280 bytes) and a map fixture (127,668 bytes) successfully through
+it. Evidence: `plugin-install-report.json`, `installed-export-report.json` and
+`native-installed.log` in the same QA directory.
+
+The existing Windows external-Python-service map oracle race is unresolved:
+`TestOracleExportMap` and `BenchMapWithPythonService` were excluded from the focused
+Go run. This is a separate test-service issue, not a failure of the successful
+native Cinema 4D exports above. Earlier full-suite Windows limitations remain
+documented below; the focused run does not claim the entire Go suite is green.
+
+## Avolition 0.8.24 validation (historical)
 
 ## Map export PNG regression (2026-10-15)
 

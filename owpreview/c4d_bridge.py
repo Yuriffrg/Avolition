@@ -18,8 +18,9 @@ QUEUE_START_TIMEOUT = 150
 SETUP_MESSAGE = ('C4D export needs Cinema 4D with Octane and the included Avolition C4D Bridge. '
                  'Copy the Avolition C4D Bridge folder from this download into Cinema 4D\'s '
                  'plugins folder, restart Cinema 4D, then export again. Keep Cinema 4D open.')
-MAP_BRIDGE_MESSAGE = ('Install the bundled Avolition C4D Bridge 0.7.5, replacing the old bridge '
+MAP_BRIDGE_MESSAGE = ('Install the bundled Avolition C4D Bridge 0.7.10, replacing the old bridge '
                       'copy, then restart Cinema 4D with Octane. Keep only one bridge installed.')
+FEATURE_BRIDGE_MESSAGE = 'This export needs the updated motion clip and map timing support. ' + MAP_BRIDGE_MESSAGE
 
 
 def map_bridge_message(status):
@@ -65,9 +66,11 @@ class BridgeClient:
                 continue
         if not live:
             return {'connected': False, 'message': SETUP_MESSAGE}
-        # Prefer a map-capable Octane instance over a newer heartbeat from an
-        # older open Cinema version. Both preflight and job dispatch use this rule.
-        value = max(live, key=lambda v: (bool(v.get('octane')), v.get('mapInstances') is True, v['heartbeat']))
+        # Prefer a capable Octane instance over a newer heartbeat from an older
+        # bridge. Both preflight and job dispatch use this rule.
+        value = max(live, key=lambda v: (bool(v.get('octane')), v.get('mapInstances') is True,
+                    sum(v.get(flag) is True for flag in ('motionClips', 'skeletonMotionClips', 'combinedMotionClips',
+                                                       'exactFrameTimes', 'optimizedGameplay1P', 'povHeightZero', 'mapTiming24')), v['heartbeat']))
         version = value.get('bridgeVersion') or 'unknown version'
         if not value.get('octane'):
             message = f'Cinema 4D connected (bridge {version}), but Octane is not loaded. Enable Octane and restart Cinema 4D.'
@@ -86,6 +89,11 @@ class BridgeClient:
             raise RuntimeError(status['message'])
         if payload.get('mapInstances') and status.get('mapInstances') is not True:
             raise RuntimeError(map_bridge_message(status))
+        for flag, capability in (('motionClip', 'combinedMotionClips'), ('motionClip', 'exactFrameTimes'),
+                                 ('gameplay1P', 'optimizedGameplay1P'), ('gameplay1P', 'povHeightZero'),
+                                 ('mapTiming24', 'mapTiming24')):
+            if payload.get(flag) and status.get(capability) is not True:
+                raise RuntimeError(FEATURE_BRIDGE_MESSAGE)
         job = self.root / 'jobs' / uuid.uuid4().hex
         job.mkdir(parents=True)
         completed = False

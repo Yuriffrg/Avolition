@@ -9,7 +9,11 @@ import { MapBatches } from './map-batching.js';
 const attribute = (values, size, TypedArray) =>
   new THREE.BufferAttribute(values instanceof TypedArray ? values : new TypedArray(values), size);
 const isTyping = target => target?.matches?.('input, textarea, select, [contenteditable="true"]');
-export const DEFAULT_VIEW_OPTIONS = Object.freeze({grid: true, skeleton: false, wireframe: false, lockRoot: false, textured: true});
+export const DEFAULT_VIEW_OPTIONS = Object.freeze({grid: true, skeleton: false, wireframe: false, lockRoot: false, textured: true, pov: false});
+const POV_FOV = 70;
+// OW's camera looks along local +Z; Three's camera looks along local -Z.
+const POV_CAMERA_BASIS = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+const isCameraBone = bone => ['bone_007d', 'camera'].includes(String(bone.name).toLowerCase());
 
 // Map backdrops can be kilometres from the playable streets. Use the placement
 // distribution only when it clearly separates those few outliers from a large
@@ -140,7 +144,7 @@ export class PreviewViewport {
   setActive(active) {
     if (this._disposed) return;
     this._active = Boolean(active);
-    this.controls.enabled = this._active;
+    this.controls.enabled = this._active && !this._povOrbitState;
     this._handleKeyUp();
     this.renderer.setAnimationLoop(this._active ? this._renderCallback : null);
     if (this._active) this._resize();
@@ -176,7 +180,7 @@ export class PreviewViewport {
     if (!this._canUseCanvas()) { this._handleKeyUp(); return; }
     // Damping still gets a tick while settling. Static maps no longer submit
     // thousands of draw calls every frame after the camera has stopped.
-    const moved = this.controls.update();
+    const moved = this._povOrbitState ? false : this.controls.update();
     if (!moved && !this._renderDirty) return;
     // Material and visibility changes always invalidate; camera moves alone
     // leave the map batches as they are.
@@ -234,6 +238,7 @@ export class PreviewViewport {
   }
 
   _clear() {
+    this._restoreOrbitCamera();
     this._assetGeneration = (this._assetGeneration || 0) + 1;
     this._materialLibrary?.dispose();
     this._materialLibrary = null;
@@ -413,6 +418,7 @@ export class PreviewViewport {
         this._mapBatches.sync();
       }
       this._loadedAsset = asset;
+      this._updatePOVCamera();
       return {models: this.models.length, meshes, bones: boneCount, vertices, polygons};
     } catch (error) {
       this._clear();
@@ -621,7 +627,75 @@ export class PreviewViewport {
       for (let i = 0; i < model.bones.length; i++) model.bones[i].matrix.fromArray(pose.localMatrices[i]);
     }
     this.assetRoot.updateMatrixWorld(true);
+    this._updatePOVCamera();
     this.invalidate();
+  }
+
+  _povCameraBone() {
+    if (this._mapScene) return null;
+    const byId = new Map(this.models.map(model => [model.source.id, model]));
+    // Selecting an attached weapon keeps the camera on its owning arms rig.
+    let selected = byId.get(this.activeModelId);
+    const visited = new Set();
+    while (selected && !visited.has(selected)) {
+      visited.add(selected);
+      const camera = selected.bones.find(isCameraBone);
+      if (camera) return camera;
+      selected = byId.get(selected.source.parentId);
+    }
+    for (const model of this.models) {
+      const camera = model.bones.find(isCameraBone);
+      if (camera) return camera;
+    }
+    return null;
+  }
+
+  getPOVStatus() {
+    return {available: Boolean(this._povCameraBone()), active: Boolean(this._povOrbitState)};
+  }
+
+  _restoreOrbitCamera() {
+    const previous = this._povOrbitState;
+    if (!previous) return;
+    this.camera.position.copy(previous.position);
+    this.camera.quaternion.copy(previous.quaternion);
+    this.camera.up.copy(previous.up);
+    for (const key of ['fov', 'near', 'far', 'zoom']) this.camera[key] = previous[key];
+    this.camera.updateProjectionMatrix();
+    this.camera.updateMatrixWorld(true);
+    this.controls.target.copy(previous.target);
+    this.controls.enabled = previous.enabled && this._active !== false;
+    this._povOrbitState = null;
+    this.invalidate();
+  }
+
+  _updatePOVCamera() {
+    // loadAsset frames the ordinary orbit view before entering a requested POV.
+    const bone = this.options.pov && this._loadedAsset && this._povCameraBone();
+    if (!bone) { this._restoreOrbitCamera(); return; }
+    if (!this._povOrbitState) {
+      // Drain old orbit inertia before preserving the view to return to.
+      const damping = this.controls.enableDamping;
+      this.controls.enableDamping = false;
+      this.controls.update();
+      this.controls.enableDamping = damping;
+      this._povOrbitState = {
+        position: this.camera.position.clone(), quaternion: this.camera.quaternion.clone(),
+        up: this.camera.up.clone(), target: this.controls.target.clone(), enabled: this.controls.enabled !== false,
+        fov: this.camera.fov, near: this.camera.near, far: this.camera.far, zoom: this.camera.zoom,
+      };
+      this.camera.fov = POV_FOV;
+      this.camera.zoom = 1;
+      this.camera.near = .001;
+      this.camera.far = Math.max(this.camera.far, 1000);
+      this.camera.updateProjectionMatrix();
+      this._handleKeyUp();
+    }
+    this.controls.enabled = false;
+    bone.getWorldPosition(this.camera.position);
+    bone.getWorldQuaternion(this.camera.quaternion);
+    this.camera.quaternion.multiply(POV_CAMERA_BASIS).normalize();
+    this.camera.updateMatrixWorld(true);
   }
 
   _enableAnimatedTransforms() {
@@ -649,6 +723,7 @@ export class PreviewViewport {
 
   frameModel({all = false} = {}) {
     if (!this.models.length) return;
+    if (this._povOrbitState) { this._updatePOVCamera(); this.invalidate(); return; }
     const fullBounds = new THREE.Box3(), placements = [];
     for (const model of this.models) {
       const placement = new THREE.Box3();

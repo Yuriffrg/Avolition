@@ -15,7 +15,7 @@ import numpy as np
 from owpreview.c4d_export import make_payload, make_set_payload
 from owpreview.c4d_scene import build_scene
 from owpreview.export_pose import PoseEvaluator
-from test_c4d_scene import make_api
+from test_c4d_scene import make_api, Node, Matrix, Vec
 from test_selected_object_export import fixture, world_matrices
 
 
@@ -129,11 +129,12 @@ class CombinedExportTests(unittest.TestCase):
         asset, assignments = assigned_fixture()
         native = make_api()
         payload = make_set_payload(asset, assignments, {})
+        payload.update(name='Gameplay1P_Reload',motionClipName='Reload')
         with tempfile.TemporaryDirectory() as temp, patch.dict(sys.modules, {
                 'c4d': native, 'c4d.modules': native.modules}):
             report = build_scene(payload, Path(temp) / 'reload.c4d')
         self.assertEqual({key: report[key] for key in ('meshCount', 'boneCount', 'skinCount', 'trackCount', 'frameCount')},
-                         dict(meshCount=3, boneCount=6, skinCount=3, trackCount=36, frameCount=31))
+                         dict(meshCount=3, boneCount=6, skinCount=3, trackCount=24, frameCount=31))
         self.assertTrue(report['verifiedNativeScene'])
         nodes = []
         def visit(obj):
@@ -145,12 +146,33 @@ class CombinedExportTests(unittest.TestCase):
         gun_entity = next(obj for obj in nodes if obj.name == 'gun_Entity')
         expected_hand = next(node['name'] for node in asset['exportHierarchy'] if node['id'] == 'arms:bone:1')
         self.assertEqual(gun_entity.parent.name, expected_hand)
-        self.assertEqual(len(gun_entity.parent.tracks), 9)
-        # Both rigs may share joint display names without sharing track objects.
-        animated_joints = [obj for obj in nodes if obj.kind == native.Ojoint and obj.tracks]
-        self.assertEqual(len(animated_joints), 4)
-        self.assertEqual(len({id(track) for obj in animated_joints for track in obj.tracks}), 36)
-        self.assertTrue(all(track.keys[-1].time == 1 for obj in animated_joints for track in obj.tracks))
+        self.assertFalse(any(obj.tracks for obj in nodes))
+        tagged = [obj for obj in nodes if any(tag.GetType()==native.Tmotionsystem for tag in obj.tags)]
+        skeletons = [node for node in asset['exportHierarchy'] if node['type']=='skeleton' and node['modelId'] in ('arms','gun')]
+        self.assertEqual([obj.name for obj in tagged],[skeletons[0]['name']])
+        self.assertEqual(report['motionClipCount'], 1)
+        self.assertEqual(report['motionTrackCount'], 24)
+        self.assertEqual(report['motionSourceNames'],['Reload'])
+        layer=tagged[0].tags[0].nla.children[0]
+        self.assertEqual(layer.name,'Layer 0')
+        self.assertEqual(layer.motion.children[0].name,'Reload')
+        nodes.clear()
+        for source in native.saved[0].nla.children:
+            members=[]
+            def gather(obj):
+                members.append(obj)
+                for child in obj.children:gather(child)
+            gather(source)
+            self.assertEqual(sum(obj.kind==native.Ojoint for obj in members),4)
+            self.assertFalse(any(obj.kind==native.Opolygon for obj in members))
+            self.assertTrue(any(obj.name=='gun_Entity' for obj in members),'Attachment connectors must be retained.')
+            self.assertFalse(any(obj.name=='charm_Entity' for obj in members),'Unassigned attachments stay outside the source.')
+            visit(source)
+        source_joints = [obj for obj in nodes if obj.kind == native.Ojoint and obj.tracks]
+        self.assertEqual(len(source_joints), 4)
+        self.assertEqual(len({id(track) for obj in source_joints for track in obj.tracks}), 24)
+        self.assertTrue(all(track.desc[0].id != native.ID_BASEOBJECT_REL_SCALE
+                            and track.keys[-1].time == 1 for obj in source_joints for track in obj.tracks))
 
     def test_include_mesh_false_still_keeps_all_attachment_rigs(self):
         asset, assignments = assigned_fixture()
@@ -161,7 +183,48 @@ class CombinedExportTests(unittest.TestCase):
             report = build_scene(payload, Path(temp) / 'skeletons.c4d')
         self.assertEqual(report['meshCount'], 0)
         self.assertEqual(report['boneCount'], 6)
-        self.assertEqual(report['trackCount'], 36)
+        self.assertEqual(report['trackCount'], 24)
+
+    def test_disjoint_rigs_share_one_joints_parent_and_named_source(self):
+        for common_parent in ('arms:entity',None):
+            with self.subTest(common_parent=common_parent):
+                asset,assignments=assigned_fixture()
+                next(node for node in asset['exportHierarchy'] if node['id']=='gun:entity')['parentId']=common_parent
+                native=make_api();payload=make_set_payload(asset,assignments,{},name='Reload')
+                with tempfile.TemporaryDirectory() as temp,patch.dict(sys.modules,{'c4d':native,'c4d.modules':native.modules}):
+                    report=build_scene(payload,Path(temp)/'reload.c4d')
+                doc=native.saved[0]
+                nodes=[]
+                def visit(obj):
+                    nodes.append(obj)
+                    for child in obj.children:visit(child)
+                for obj in doc.roots:visit(obj)
+                tagged=[obj for obj in nodes if any(tag.kind==native.Tmotionsystem for tag in obj.tags)]
+                self.assertEqual(len(tagged),1)
+                group=tagged[0]
+                self.assertEqual(group.name,'Joints')
+                self.assertEqual(group.parent.name if group.parent else None,'Gameplay1P' if common_parent else None)
+                self.assertEqual(len(group.children),2)
+                self.assertEqual(report['motionSourceNames'],['Reload'])
+                self.assertEqual((report['motionClipCount'],report['motionTrackCount']),(1,24))
+                source=doc.nla.children[0]
+                self.assertEqual([obj.name for obj in source.children],[obj.name for obj in group.children])
+                self.assertTrue(all(obj.kind==native.Onull for obj in source.children))
+                self.assertEqual(len(doc.nla.children),1)
+                self.assertFalse(any(obj.tracks for obj in nodes))
+
+    def test_grouping_cannot_change_existing_world_poses(self):
+        asset,assignments=assigned_fixture()
+        next(node for node in asset['exportHierarchy'] if node['id']=='gun:entity')['parentId']='arms:entity'
+        native=make_api()
+        class BrokenReparent(Node):
+            def SetMg(self,matrix):self.matrix=Matrix(off=Vec(99999,0,0))
+        native.BaseObject=BrokenReparent
+        payload=make_set_payload(asset,assignments,{},name='Reload')
+        with tempfile.TemporaryDirectory() as temp,patch.dict(sys.modules,{'c4d':native,'c4d.modules':native.modules}):
+            with self.assertRaisesRegex(RuntimeError,'conversion did not preserve sampled animated joint transforms'):
+                build_scene(payload,Path(temp)/'reload.c4d')
+        self.assertEqual(native.saved,[])
 
     def test_selected_object_export_is_still_independent(self):
         asset, assignments = assigned_fixture()

@@ -168,23 +168,39 @@ def _skin(c4d, character, obj, mesh, joints):
     return True
 
 
-def _keys(c4d, obj, frames, fps):
-    """Bake continuous HPB angles on native relative position/rotation/scale."""
-    channels = [[], [], []]
+def _frame_time(c4d, frame, fps):
+    """Retain the frame fraction; BaseTime(seconds) rounds to milliseconds."""
+    if float(fps).is_integer():
+        return c4d.BaseTime(int(frame), int(fps))
+    from fractions import Fraction
+    rate = Fraction(str(fps)).limit_denominator(1000000)
+    return c4d.BaseTime(int(frame) * rate.denominator, rate.numerator)
+
+
+def _keys(c4d, obj, frames, fps, warnings):
+    """Bake position/rotation only, retaining the first frame's static scale."""
+    channels = [[], []]
     previous = None
+    first_scale, scale_changes = None, False
     order = obj[c4d.ID_BASEOBJECT_ROTATION_ORDER]
     for frame, values in enumerate(frames):
         matrix = _matrix(c4d, values, f'{obj.GetName()} frame {frame}')
         # With fresh objects there is no frozen transform; SetMl includes the
         # same decomposition Cinema 4D uses for its coordinate manager.
         obj.SetMl(matrix)
+        scale_value = obj.GetRelScale()
+        scale = (scale_value.x, scale_value.y, scale_value.z)
+        if first_scale is None:
+            first_scale = scale
+        elif any(abs(a-b) > 1e-5*max(1.0, abs(a), abs(b)) for a, b in zip(first_scale, scale)):
+            scale_changes = True
         rotation = obj.GetRelRot()
         if previous is not None:
             rotation = c4d.utils.GetOptimalAngle(previous, rotation, order)
         previous = rotation
-        for target, value in zip(channels, (obj.GetRelPos(), rotation, obj.GetRelScale())):
+        for target, value in zip(channels, (obj.GetRelPos(), rotation)):
             target.append(value)
-    ids = (c4d.ID_BASEOBJECT_REL_POSITION, c4d.ID_BASEOBJECT_REL_ROTATION, c4d.ID_BASEOBJECT_REL_SCALE)
+    ids = (c4d.ID_BASEOBJECT_REL_POSITION, c4d.ID_BASEOBJECT_REL_ROTATION)
     for param, values in zip(ids, channels):
         for axis, component in enumerate((c4d.VECTOR_X, c4d.VECTOR_Y, c4d.VECTOR_Z)):
             desc = c4d.DescID(c4d.DescLevel(param, c4d.DTYPE_VECTOR, 0),
@@ -193,15 +209,15 @@ def _keys(c4d, obj, frames, fps):
             obj.InsertTrackSorted(track)
             curve = track.GetCurve()
             for frame, value in enumerate(values):
-                # BaseDocument's integer display FPS can differ from source
-                # fractional FPS; exact seconds retain source timing.
-                key = curve.AddKey(c4d.BaseTime(frame/float(fps)))
+                key = curve.AddKey(_frame_time(c4d, frame, fps))
                 if not key:
                     raise RuntimeError(f'Could not add a key to {obj.GetName()}.')
                 key['key'].SetValue(curve, float(value[axis]))
                 key['key'].SetInterpolation(curve, c4d.CINTERPOLATION_LINEAR)
     obj.SetMl(_matrix(c4d, frames[0], obj.GetName()))
-    return 9
+    if scale_changes:
+        warnings.append(f'{obj.GetName()}: animated scale was omitted; the first frame\'s scale is retained.')
+    return 6
 
 
 def _walk(root, prefix=()):
@@ -263,13 +279,14 @@ def _structural_snapshot(c4d, doc):
     return dict(objects=nodes, materials=materials, renderEngine=engine)
 
 
-def _pose_snapshots(c4d, doc, frames, fps):
+def _pose_snapshots(c4d, doc, frames, fps, objects=None):
     snapshots = []
     last_frame = None
     for frame in frames:
-        doc.SetTime(c4d.BaseTime(frame/fps))
+        doc.SetTime(_frame_time(c4d, frame, fps))
         doc.ExecutePasses(None, True, True, True, c4d.BUILDFLAGS_NONE)
-        snapshots.append([_transform_values(obj.GetMg()) for _, obj in _walk(doc.GetFirstObject())])
+        posed = objects if objects is not None else [obj for _, obj in _walk(doc.GetFirstObject())]
+        snapshots.append([_transform_values(obj.GetMg()) for obj in posed])
         last_frame = frame
     if last_frame != 0:
         doc.SetTime(c4d.BaseTime(0))
@@ -277,8 +294,36 @@ def _pose_snapshots(c4d, doc, frames, fps):
     return snapshots
 
 
-def _verify_saved(c4d, destination, expected, structure, poses, frames):
+def _timeline_snapshot(doc):
+    return dict(fps=doc.GetFps(), minimum=doc.GetMinTime().Get(),
+                maximum=doc.GetMaxTime().Get(), previewMinimum=doc.GetLoopMinTime().Get(),
+                previewMaximum=doc.GetLoopMaxTime().Get(), current=doc.GetTime().Get())
+
+
+def _check_poses(expected, actual, message):
+    if len(expected) != len(actual):
+        raise RuntimeError(message)
+    for expected_frame, actual_frame in zip(expected, actual):
+        if len(expected_frame) != len(actual_frame):
+            raise RuntimeError(message)
+        for before, after in zip(expected_frame, actual_frame):
+            if len(before) != len(after) or not all(math.isfinite(v) for v in (*before, *after)):
+                raise RuntimeError(message)
+            # Native NLA evaluates transformed translations at finite precision.
+            # Cancellation after parent rotation can put micrometre-sized drift
+            # on an axis whose expected value is zero. Compare position vectors
+            # at their world-space magnitude, keeping the same relative limit;
+            # basis/scale components retain their strict per-component check.
+            position_scale = max(1.0, math.hypot(*before[:3]), math.hypot(*after[:3]))
+            if math.dist(before[:3], after[:3]) > 1e-5*position_scale:
+                raise RuntimeError(message)
+            if any(abs(a-b) > 1e-5*max(1, abs(a), abs(b)) for a, b in zip(before[3:], after[3:])):
+                raise RuntimeError(message)
+
+
+def _verify_saved(c4d, destination, expected, structure, poses, frames, motion=None, timeline=None):
     """Reopen only the new detached scene, verifying native data survived save."""
+    from .c4d_motion import is_scale_track
     flags = c4d.SCENEFILTER_OBJECTS | c4d.SCENEFILTER_MATERIALS
     check = c4d.documents.LoadDocument(str(destination), flags)
     if check is None:
@@ -293,6 +338,8 @@ def _verify_saved(c4d, destination, expected, structure, poses, frames):
                     counts[key] += int(obj.GetType() == kind)
                 track = obj.GetFirstCTrack()
                 while track is not None:
+                    if is_scale_track(c4d, track):
+                        raise RuntimeError('Saved Cinema 4D scene contains unexpected scale animation tracks.')
                     counts['trackCount'] += 1
                     curve = track.GetCurve()
                     if curve is None or curve.GetKeyCount() != expected['frameCount']:
@@ -304,15 +351,20 @@ def _verify_saved(c4d, destination, expected, structure, poses, frames):
         while material is not None:
             counts['materialCount'] += 1
             material = material.GetNext()
+        if motion is not None:
+            from .c4d_motion import motion_snapshot
+            actual_motion = motion_snapshot(c4d, check, expected['frameCount'])
+            if actual_motion != motion:
+                raise RuntimeError('Saved Cinema 4D scene changed the Motion Clip or Motion Source.')
+            counts['trackCount'] += sum(source['count'] for source in actual_motion['sources'])
         if any(counts[key] != expected[key] for key in counts):
             raise RuntimeError(f'Cinema 4D scene verification failed: {counts}')
         if _structural_snapshot(c4d, check) != structure:
             raise RuntimeError('Saved Cinema 4D scene changed hierarchy, skin links, materials or texture paths.')
+        if timeline is not None and _timeline_snapshot(check) != timeline:
+            raise RuntimeError('Saved Cinema 4D scene changed the project time or frame range.')
         actual = _pose_snapshots(c4d, check, frames, expected['fps'])
-        for expected_frame, actual_frame in zip(poses, actual):
-            for before, after in zip(expected_frame, actual_frame):
-                if any(abs(a-b) > 1e-5*max(1, abs(a), abs(b)) for a, b in zip(before, after)):
-                    raise RuntimeError('Saved Cinema 4D scene did not preserve sampled animated joint transforms.')
+        _check_poses(poses, actual, 'Saved Cinema 4D scene did not preserve sampled animated joint transforms.')
     finally:
         c4d.documents.KillDocument(check)
 
@@ -342,18 +394,22 @@ def build_scene(payload, destination):
         for frame, values in enumerate(track['frames']):
             _matrix_values(values, f'{track["modelId"]} bone {track["boneIndex"]} frame {frame}')
     doc = c4d.documents.BaseDocument()
-    objects, joints, meshes = {}, {}, []
+    objects, joints, skeletons, meshes = {}, {}, {}, []
     warnings = list(payload.get('warnings', []))
     report = dict(meshCount=0, boneCount=0, materialCount=0, skinCount=0, trackCount=0,
                   frameCount=last+1, fps=fps, upAxis='Y', unit='centimetres', warnings=warnings)
     try:
         doc.SetDocumentName(destination.name)
         doc.SetDocumentPath(str(destination.parent))
-        doc.SetFps(max(1, round(fps)))
+        display_fps = max(1, round(fps))
+        doc.SetFps(display_fps)
+        # C4D requires a non-empty project range: setting 0..0 moves the
+        # minimum to -1 frame. Static maps use exactly one frame, starting at 0.
+        end = _frame_time(c4d, last, fps) if last else c4d.BaseTime(1, display_fps)
         doc.SetMinTime(c4d.BaseTime(0))
-        doc.SetMaxTime(c4d.BaseTime(last/fps))
+        doc.SetMaxTime(end)
         doc.SetLoopMinTime(c4d.BaseTime(0))
-        doc.SetLoopMaxTime(c4d.BaseTime(last/fps))
+        doc.SetLoopMaxTime(end)
         doc.SetTime(c4d.BaseTime(0))
         units = doc[c4d.DOCUMENT_DOCUNIT]
         units.SetUnitScale(1.0, c4d.DOCUMENT_UNIT_CM)
@@ -375,7 +431,10 @@ def build_scene(payload, destination):
                     report['boneCount'] += 1
             if obj is None:
                 raise RuntimeError(f'Cinema 4D could not create {node["name"]}.')
-            obj.SetName(node['name'])
+            name = node['name']
+            if payload.get('gameplay1P') and payload.get('heroName') and kind == 'entity' and not node.get('parentId'):
+                name = str(payload['heroName'])
+            obj.SetName(name)
             parent = objects.get(node.get('parentId'))
             if parent is not None:
                 obj.InsertUnderLast(parent)
@@ -384,6 +443,10 @@ def build_scene(payload, destination):
                 last_root = obj
             obj.SetMl(_matrix(c4d, node.get('matrix', IDENTITY), node['name']))
             objects[node['id']] = obj
+            if kind == 'skeleton':
+                if mid in skeletons:
+                    raise ValueError('An export model has more than one skeleton root.')
+                skeletons[mid] = obj
 
         materials = create_octane_materials(doc, payload.get('materials', {}) if meshes else {},
                                             texture_root=destination.parent, warnings=warnings)
@@ -409,18 +472,48 @@ def build_scene(payload, destination):
             obj = joints.get((track['modelId'], int(track['boneIndex'])))
             if obj is None:
                 raise ValueError('An animation track references a missing joint.')
-            report['trackCount'] += _keys(c4d, obj, track['frames'], fps)
+            report['trackCount'] += _keys(c4d, obj, track['frames'], fps, warnings)
+        if payload.get('gameplay1P'):
+            from .c4d_pov import optimize_gameplay1p
+            optimized = optimize_gameplay1p(c4d, doc, payload, objects, joints, skeletons,
+                                            meshes, models, warnings)
+            objects, joints, skeletons = (optimized[key] for key in ('objects', 'joints', 'skeletons'))
+            meshes = optimized['meshes']
+            report.update(optimized['report'])
         sample_frames = sorted({0, last//2, last})
-        poses = _pose_snapshots(c4d, doc, sample_frames, fps)
+        posed_objects = [obj for _, obj in _walk(doc.GetFirstObject())]
+        poses = _pose_snapshots(c4d, doc, sample_frames, fps, posed_objects)
+        motion = None
+        if payload.get('motionClip') and animation.get('tracks'):
+            from .c4d_motion import create_motion_clips, motion_snapshot
+            animated_models = {track['modelId'] for track in animation['tracks']}
+            if not animated_models.issubset(skeletons):
+                raise ValueError('An animated model has no skeleton root for its Motion Clip.')
+            rigs = [(root, [joint for (model_id, _), joint in joints.items() if model_id == mid])
+                    for mid, root in skeletons.items() if mid in animated_models]
+            motion_name = str(payload.get('motionClipName') or payload.get('name') or destination.stem)
+            report.update(create_motion_clips(c4d, doc, motion_name, end, rigs))
+            motion = motion_snapshot(c4d, doc, last+1)
+            if not report['motionClipCount'] or not report['motionTrackCount']:
+                raise RuntimeError('Cinema 4D did not create the requested Motion Clip.')
+            _check_poses(poses, _pose_snapshots(c4d, doc, sample_frames, fps, posed_objects),
+                         'Motion Clip conversion did not preserve sampled animated joint transforms.')
+            # A shared Joints parent can reorder disjoint skeleton branches.
+            # The comparison above uses the original object references, so it
+            # checks their poses across grouping as well as NLA conversion.
+            # Reload uses the final hierarchy, including any new parent null.
+            poses = _pose_snapshots(c4d, doc, sample_frames, fps)
         # Snapshots leave frame zero evaluated. Avoid repeating that expensive
         # full-scene pass for static maps before structure validation and save.
         structure = _structural_snapshot(c4d, doc)
+        timeline = _timeline_snapshot(doc)
         flags = c4d.SAVEDOCUMENTFLAGS_DONTADDTORECENTLIST
         if not c4d.documents.SaveDocument(doc, str(destination), flags, c4d.FORMAT_C4DEXPORT):
             raise RuntimeError('Cinema 4D failed to save the native scene.')
         if not destination.is_file() or destination.stat().st_size == 0:
             raise RuntimeError('Cinema 4D reported success but did not create a scene file.')
-        _verify_saved(c4d, destination, report, structure, poses, sample_frames)
+        _verify_saved(c4d, destination, report, structure, poses, sample_frames, motion, timeline)
+        report['timeline'] = timeline
         report['bytes'] = destination.stat().st_size
         report['verifiedNativeScene'] = True
         return report

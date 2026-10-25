@@ -5,6 +5,16 @@ import numpy as np
 from .export_pose import PoseEvaluator, decompose
 
 
+def source_identity(source_path):
+    """Read source identity independently of display names and host path syntax."""
+    parts = [part for part in str(source_path or '').replace('\\', '/').split('/') if part]
+    gameplay_1p = bool(parts and parts[-1].lower() == 'gameplay1p.owentity')
+    for index in range(len(parts) - 3, -1, -1):
+        if parts[index].lower() == 'heroes' and parts[index + 1] not in ('.', '..'):
+            return gameplay_1p, parts[index + 1]
+    return gameplay_1p, ''
+
+
 def select_model_asset(asset, model_id):
     """Project an entity to one model and its complete native skeleton.
 
@@ -173,7 +183,7 @@ def _normalized_normal_asset(asset):
 
 
 def make_payload(asset, clip, materials, *, include_mesh=True, root_motion=True,
-                 clip_name=None, rig_id='auto', scope_model_id=None):
+                 clip_name=None, rig_id='auto', scope_model_id=None, motion_clip_name=None):
     if scope_model_id is not None:
         if rig_id not in ('auto', scope_model_id):
             raise ValueError('The animation target must be the object selected for C4D export.')
@@ -215,14 +225,18 @@ def make_payload(asset, clip, materials, *, include_mesh=True, root_motion=True,
                                  f'({selected["bones"][i]["name"]}, frame {frame}). '
                                  'This clip cannot be represented as C4D PSR animation without changing the original hierarchy.') from error
             track['frames'].append(local.T.reshape(-1).tolist())
+    gameplay_1p, hero_name = source_identity(asset.get('path'))
     return {'version': 1, 'asset': native_asset, 'materials': materials,
             'warnings': list(native_asset.get('warnings', [])),
             'includeMesh': bool(include_mesh), 'name': clip_name or clip.get('name', 'Animation'),
+            'motionClip': bool(tracks),
+            'motionClipName': motion_clip_name or clip_name or clip.get('name', 'Animation'),
+            'gameplay1P': gameplay_1p, 'heroName': hero_name,
             'animation': {'fps': fps, 'lastFrame': last, 'tracks': tracks, 'matchedBones': matched}}
 
 
 def make_set_payload(asset, assignments, materials, *, include_mesh=True,
-                     root_motion=True, name='Animation set'):
+                     root_motion=True, name='Animation set', motion_clip_name=None):
     """Bake explicit per-model clips into one existing native entity hierarchy.
 
     ``assignments`` contains ``{modelId, clip}`` records, where ``clip`` is a
@@ -313,9 +327,13 @@ def make_set_payload(asset, assignments, materials, *, include_mesh=True,
                               matchedBones=item['matched'],
                               unmatchedBoneNames=item['missing']))
     native_asset = _normalized_normal_asset(asset) if include_mesh else asset
+    gameplay_1p, hero_name = source_identity(asset.get('path'))
     return {'version': 1, 'asset': native_asset, 'materials': materials,
             'warnings': list(native_asset.get('warnings', [])),
             'includeMesh': bool(include_mesh), 'name': name,
+            'motionClip': bool(tracks),
+            'motionClipName': motion_clip_name or name,
+            'gameplay1P': gameplay_1p, 'heroName': hero_name,
             'animation': {'fps': fps, 'lastFrame': last, 'durationSeconds': duration,
                           'tracks': tracks, 'assignments': summaries,
                           'matchedBones': sum(item['matched'] for item in prepared)}}

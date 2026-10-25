@@ -213,7 +213,7 @@ class BrowserAPI:
                 'exportQueue': queue,
                 'maps': self._map_settings(),
                 'mapExport': self._map_exports.snapshot(),
-                'version': '0.8.24', 'appName': 'Avolition', 'browserMode': not self._desktop_mode}
+                'version': '0.8.29', 'appName': 'Avolition', 'browserMode': not self._desktop_mode}
 
     def _map_settings(self):
         saved = self._catalog.get('maps', {})
@@ -422,6 +422,21 @@ class BrowserAPI:
     def read_clip_bindings(self, paths):
         return self._clip_bindings.read(paths)
 
+    @staticmethod
+    def _motion_clip_name(value):
+        if not isinstance(value, str) or not value.strip() or len(value) > 180 or '\x00' in value:
+            raise ValueError('Enter a valid motion clip nickname (1–180 characters).')
+        return value
+
+    @staticmethod
+    def _queue_motion_clip_name(entry):
+        if 'motionClipName' in entry:
+            return entry['motionClipName']
+        # Old entries stored the generated scene filename. Remove only the exact
+        # known entity prefix once; later library annotations are independent.
+        name, prefix = entry['name'], Path(entry['entityPath']).stem + '_'
+        return name[len(prefix):] if name.startswith(prefix) and len(name) > len(prefix) else name
+
     def _export_queue_entries(self):
         entries = self._catalog.get('exportQueue', [])
         if not isinstance(entries, list):
@@ -446,6 +461,8 @@ class BrowserAPI:
                     models.add(assignment['modelId'])
             if not valid:
                 raise ValueError('The saved export list contains invalid entries. Restore a valid catalog.json before editing it.')
+            if 'motionClipName' in entry:
+                self._motion_clip_name(entry['motionClipName'])
             validate_names(entry.get('objectNames', {}))
             seen.add(entry['id'])
         # Do not require source files on restore: unavailable entries must remain
@@ -470,7 +487,7 @@ class BrowserAPI:
     @reply
     def export_queue_save(self, entry):
         """Save a named scene snapshot locally without exporting any files."""
-        if not isinstance(entry, dict) or set(entry) - {'id', 'name', 'entityPath', 'rootPath', 'assignments', 'objectNames'}:
+        if not isinstance(entry, dict) or set(entry) - {'id', 'name', 'entityPath', 'rootPath', 'assignments', 'objectNames', 'motionClipName'}:
             raise ValueError('Invalid export list entry.')
         ident = self._queue_id(entry['id']) if 'id' in entry else secrets.token_hex(16)
         name = entry.get('name')
@@ -480,6 +497,8 @@ class BrowserAPI:
         if name.lower().endswith('.c4d'):
             name = name[:-4]
         name = Path(self._copy_name(name)).stem
+        if 'motionClipName' in entry:
+            self._motion_clip_name(entry['motionClipName'])
         entity, root = entry.get('entityPath'), entry.get('rootPath')
         if not isinstance(entity, str) or not Path(entity).is_absolute() or Path(entity).suffix.lower() not in ('.owentity', '.owmdl'):
             raise ValueError('Load an entity or model before adding an export.')
@@ -508,6 +527,8 @@ class BrowserAPI:
                   'rootPath': str(Path(root).resolve()), 'assignments': captured,
                   'objectNames': validate_names(entry['objectNames'] if 'objectNames' in entry else
                                                 self._register_names(entity, asset)['objectNames'], asset)}
+        if 'motionClipName' in entry:
+            record['motionClipName'] = entry['motionClipName']
         with self._lock:
             entries = self._export_queue_entries()
             existing = next((index for index, item in enumerate(entries) if item['id'] == ident), None)
@@ -551,7 +572,8 @@ class BrowserAPI:
                 if snapshot is None:
                     raise ValueError('This export list entry no longer exists.')
                 destination = (self._catalog.get('outputFolder') or self._output_folder()) if output_folder is None else output_folder
-            settings = dict(options or {}, rootPath=snapshot['rootPath'], objectNames=snapshot.get('objectNames', {}))
+            settings = dict(options or {}, rootPath=snapshot['rootPath'], objectNames=snapshot.get('objectNames', {}),
+                            motionClipName=self._queue_motion_clip_name(snapshot))
             return BrowserAPI.export_animation_set.__wrapped__(self, snapshot['entityPath'], snapshot['assignments'],
                                                                 snapshot['name'], destination, settings)
         finally:
@@ -726,6 +748,7 @@ class BrowserAPI:
             raise ValueError('Select an .owanimclip animation to copy.')
         read_clip_header(source)
         filename = self._copy_name(nickname)
+        motion_name = self._motion_clip_name((options or {}).get('motionClipName', Path(filename).stem))
         selected_id = (options or {}).get('selectedModelId')
         scoped_asset = None
         if selected_id:
@@ -747,7 +770,8 @@ class BrowserAPI:
         if settings['clipEnabled'] and self._key(source) == self._key(desired):
             raise ValueError('The destination is the same source file. Choose a different output folder or nickname.')
         if settings['enabled'] or settings['c4dEnabled']:
-            return self._export_fbx_animation(source, folder, filename, options or {}, settings, scoped_asset=scoped_asset)
+            return self._export_fbx_animation(source, folder, filename, options or {}, settings,
+                                              scoped_asset=scoped_asset, motion_name=motion_name)
         with self._lock:
             folder_existed = folder.exists()
             result = export_bundle(source, folder, filename, None, ('clip',))
@@ -790,6 +814,7 @@ class BrowserAPI:
         if name.lower().endswith('.c4d'):
             name = name[:-4]
         filename = self._copy_name(name)
+        motion_name = self._motion_clip_name(options.get('motionClipName', Path(filename).stem))
         folder = self._folder_path(self._output_folder() if output_folder is None else output_folder)
         captured = []
         seen = set()
@@ -809,7 +834,8 @@ class BrowserAPI:
         # Validate all models, clips, timing and hierarchy before contacting
         # Cinema or creating the output folder. Reuse this sampled payload.
         payload = make_set_payload(asset, captured, {}, include_mesh=settings['includeMesh'],
-                                   root_motion=settings['rootMotion'], name=Path(filename).stem)
+                                   root_motion=settings['rootMotion'], name=Path(filename).stem,
+                                   motion_clip_name=motion_name)
         status = self._c4d_bridge.status()
         if not status['connected'] or not status.get('octane'):
             raise RuntimeError(status['message'])
@@ -834,7 +860,7 @@ class BrowserAPI:
             self._record_export(folder, folder_existed, result)
             return result
 
-    def _export_fbx_animation(self, source, folder, filename, options, settings, scoped_asset=None):
+    def _export_fbx_animation(self, source, folder, filename, options, settings, scoped_asset=None, motion_name=None):
         from owpreview.export_textures import bake_materials
         from owpreview.fbx import export_fbx
         entity_path = str(options.get('entityPath') or '')
@@ -877,7 +903,8 @@ class BrowserAPI:
                 if 'c4d' in destinations:
                     from owpreview.c4d_export import make_payload
                     payload = make_payload(asset, clip, baked['materials'], include_mesh=settings['includeMesh'],
-                                           root_motion=settings['rootMotion'], clip_name=Path(filename).stem, rig_id=rig_id)
+                                           root_motion=settings['rootMotion'], clip_name=Path(filename).stem,
+                                           rig_id=rig_id, motion_clip_name=motion_name)
                     result = self._c4d_bridge.export(payload, destinations['c4d'], texture_folder)
                     warnings += payload.get('warnings', []) + result.get('warnings', [])
                 result = {'warnings': list(dict.fromkeys(warnings))}

@@ -28,7 +28,7 @@
         <button id="tab-maps" type="button" role="tab" aria-selected="false" aria-controls="workflow-maps" data-workflow="maps" tabindex="-1">Maps</button>
         <button id="tab-toolchain" type="button" role="tab" aria-selected="false" aria-controls="workflow-toolchain" data-workflow="toolchain" tabindex="-1">Toolchain</button>
       </nav>
-      <div class="header-actions"><div class="local-badge"><span class="status-dot"></span>LOCAL PREVIEW <span class="version">v0.8.24</span></div><button id="close-app" class="button secondary small" hidden>Close app</button></div>
+      <div class="header-actions"><div class="local-badge"><span class="status-dot"></span>LOCAL PREVIEW <span class="version">v0.8.29</span></div><button id="close-app" class="button secondary small" hidden>Close app</button></div>
     </header>
 
     <section id="toolchain-directories" class="workflow-directories" aria-label="Toolchain export directories" hidden>
@@ -75,8 +75,8 @@
           <p id="object-animation-status">Choose an object, then browse animations. Each object keeps its own clip.</p>
           <div id="animation-set" class="animation-set" role="group" aria-label="Assigned animations" hidden></div>
           <div id="animation-set-export-controls" class="animation-set-export-controls" hidden>
-            <label class="animation-set-name-label" for="animation-set-name">Animation export name</label>
-            <div class="animation-set-export-row"><input id="animation-set-name" type="text" maxlength="160" placeholder="[entity]_nickname" autocomplete="off"><button id="export-animation-set" class="button primary small" type="button">Add to export</button></div>
+            <label class="animation-set-name-label" for="animation-set-name">Animation nickname</label>
+            <div class="animation-set-export-row"><input id="animation-set-name" type="text" maxlength="160" placeholder="Animation nickname" autocomplete="off"><button id="export-animation-set" class="button primary small" type="button">Add to export</button></div>
             <p id="animation-set-export-status" class="animation-set-export-status" role="status" aria-live="polite"></p>
             <p class="animation-set-help">Adds the whole entity with its assigned clips and attachments.</p>
           </div>
@@ -108,7 +108,7 @@
           <div id="objects-list" class="objects-list" role="tree" aria-label="Preview object hierarchy"></div>
           <p class="objects-note">Select a model to animate it. Double-click names to rename for new exports.</p>
         </section>
-        <div class="view-settings"><h3>Viewport</h3><div class="view-toggles"><label><input id="show-textures" type="checkbox" checked><span>Textures</span></label><label><input id="show-grid" type="checkbox" checked><span>Grid</span></label><label><input id="show-skeleton" type="checkbox"><span>Skeleton</span></label><label><input id="show-wireframe" type="checkbox"><span>Wireframe</span></label><label title="Preview only: keep the root at its starting horizontal position. Exports use Keep root motion separately."><input id="lock-root" type="checkbox"><span>In-place</span></label></div><p id="material-status" class="view-note">Textures load from the entity material files.</p></div>
+        <div class="view-settings"><h3>Viewport</h3><div class="view-toggles"><label><input id="show-textures" type="checkbox" checked><span>Textures</span></label><label><input id="show-grid" type="checkbox" checked><span>Grid</span></label><label><input id="show-skeleton" type="checkbox"><span>Skeleton</span></label><label><input id="show-wireframe" type="checkbox"><span>Wireframe</span></label><label title="Preview only: keep the root at its starting horizontal position. Exports use Keep root motion separately."><input id="lock-root" type="checkbox"><span>In-place</span></label><label title="Preview from the animated Camera joint with a first-person field of view. Uncheck to return to your orbit view."><input id="pov-camera" type="checkbox"><span>POV cam</span></label></div><p id="pov-status" class="view-note" hidden></p><p id="material-status" class="view-note">Textures load from the entity material files.</p></div>
       </aside>
     </main>
     </section>

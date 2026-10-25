@@ -304,7 +304,7 @@ func TestShutdownDoesNotJoinHeldNativeWorker(t *testing.T) {
 
 func newMapBridge() *mockBridge {
 	bridge := newMockBridge()
-	bridge.status.extra = map[string]any{"mapInstances": true}
+	bridge.status.extra = map[string]any{"mapInstances": true, "mapTiming24": true}
 	return bridge
 }
 
@@ -386,7 +386,7 @@ func TestFailedMapSaveAndOldBridgePreserveExistingExports(t *testing.T) {
 	if len(bridge.calls) != calls {
 		t.Fatal("old bridge used")
 	}
-	bridge.status.extra = map[string]any{"mapInstances": true}
+	bridge.status.extra = map[string]any{"mapInstances": true, "mapTiming24": true}
 	ok(t, call(t, a, "export_map", mapPath, "Recovered", nil, nil, false))
 }
 

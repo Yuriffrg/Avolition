@@ -65,6 +65,18 @@ func AppendPayloadJSON(dst []byte, p *Payload) ([]byte, error) {
 		return nil, err
 	}
 	a := &p.Animation
+	dst = append(dst, `,"motionClip":`...)
+	dst = strconv.AppendBool(dst, p.MotionClip)
+	dst = append(dst, `,"motionClipName":`...)
+	if dst, err = appendValue(dst, p.MotionClipName); err != nil {
+		return nil, err
+	}
+	dst = append(dst, `,"gameplay1P":`...)
+	dst = strconv.AppendBool(dst, p.Gameplay1P)
+	dst = append(dst, `,"heroName":`...)
+	if dst, err = appendValue(dst, p.HeroName); err != nil {
+		return nil, err
+	}
 	dst = append(dst, `,"animation":{"fps":`...)
 	if dst, err = appendFloat(dst, a.FPS); err != nil {
 		return nil, err

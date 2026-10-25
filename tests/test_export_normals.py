@@ -158,7 +158,8 @@ class ExportNormalTests(unittest.TestCase):
                     'c': [0, 1/math.sqrt(2), -1/math.sqrt(2)],
                     'd': [0, 1/math.sqrt(2), -1/math.sqrt(2)]}
         for corner, value in expected.items():
-            np.testing.assert_allclose(normals[corner], value, atol=1e-12)
+                normal = normals[corner]
+                np.testing.assert_allclose([normal.x, normal.y, normal.z], value, atol=1e-12)
 
 
 class MapExportNormalTests(unittest.TestCase):

@@ -190,7 +190,7 @@ class CatalogMigrationTests(unittest.TestCase):
         self.assertEqual(restored['catalog'], {})
         self.assertFalse(restored['browserMode'])
         self.assertEqual(restored['appName'], 'Avolition')
-        self.assertEqual(restored['version'], '0.8.24')
+        self.assertEqual(restored['version'], '0.8.29')
         self.assertTrue(api.save_annotation(str(self.clip), self.annotation)['ok'])
         self.assertTrue(self.current.is_file())
         self.assertFalse(self.legacy.exists())

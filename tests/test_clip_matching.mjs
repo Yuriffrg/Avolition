@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import {modelContext, matchClip, sortClipMatches, compareMatchScores, indexOccurrences, trackGroups} from '../web/clip-matching.js';
+import {modelContext, matchClip, sortClipMatches, compareMatchScores, indexOccurrences, trackGroups,
+  assignmentDurationReference, matchesDuration} from '../web/clip-matching.js';
 
 let checks = 0;
 const same = (actual, expected, message) => { assert.deepEqual(actual, expected, message); checks++; };
@@ -95,4 +96,43 @@ same(trackGroups([]),[]);
 same(trackGroups([{boneCount:0,error:'Unreadable header'},{boneCount:19,binding:{error:'Unreadable keyframes'}},{boneCount:0}]),
   [{tracks:19,count:1},{tracks:0,count:1}], 'Unreadable headers are excluded, while valid counts remain useful when binding metadata is unavailable.');
 same(trackGroups([gunGood,gunWrong]),[{tracks:19,count:2}],'Grouping is exact count only; it does not classify rigs.');
+
+const assignedArms = {name:'ADS Up',durationSeconds:0.5,fps:30};
+const assignedAccessory = {name:'Other motion',durationSeconds:3,fps:24};
+const assignments = new Map([['arms',assignedArms],['weapon',{durationSeconds:2,fps:60}],['accessory',assignedAccessory]]);
+const hierarchy = [{id:'arms'}, {id:'weapon',parentId:'arms'}, {id:'accessory',parentId:'arms'}];
+const reference = assignmentDurationReference(assignments,'weapon',hierarchy);
+same(reference.clip,assignedArms,'An attached weapon follows its assigned ancestor rather than a later accessory assignment.');
+same(assignmentDurationReference(assignments,'arms',hierarchy).clip,assignedAccessory,'Without an assigned ancestor, use the last assigned other object.');
+same(assignmentDurationReference(new Map([['weapon',assignedArms]]),'weapon',hierarchy),null,'The selected object never supplies its own suggestion duration.');
+same(assignmentDurationReference(new Map(),'weapon',hierarchy),null,'No assignments preserve the original browsing order.');
+same(assignmentDurationReference(new Map([['arms',{durationSeconds:0,fps:30}]]),'weapon',hierarchy),null,'Rest poses do not imply a timed companion animation.');
+same(assignmentDurationReference(new Map([['arms',{error:'Unreadable',durationSeconds:2,fps:30}]]),'weapon',hierarchy),null,'Invalid assignments do not supply duration evidence.');
+same(assignmentDurationReference(assignments,'weapon',[{id:'weapon',parentId:'loop'},{id:'loop',parentId:'weapon'}]).clip,
+  assignedAccessory,'Malformed parent cycles terminate and fall back to another assignment.');
+same(matchesDuration({lastFrame:30,fps:60},reference),true,'Different FPS compare playback seconds.');
+same(matchesDuration({durationFrames:31,fps:60},reference),true,'Frame counts include frame zero when seconds are missing.');
+same(matchesDuration({durationSeconds:0.5+1/30,fps:60},reference),true,'One source frame of rounding is allowed across sampling rates.');
+same(matchesDuration({durationSeconds:0.5+2/30,fps:60},reference),false,'Two-frame differences do not gain a same-duration preference.');
+same(matchesDuration({durationSeconds:0.5},reference),true,'Exact duration remains evidence without FPS.');
+same(matchesDuration({durationSeconds:0.51},reference),false,'Missing FPS does not invent a frame tolerance.');
+same(matchesDuration({durationSeconds:null,fps:30},reference),false,'Missing duration does not become zero.');
+same(matchesDuration({durationSeconds:NaN,fps:30},reference),false,'Non-finite durations cannot match.');
+same(matchesDuration({error:'Bad file',durationSeconds:0.5,fps:30},reference),false,'An invalid file gains no duration evidence.');
+
+const longWeapon = clip('A_long',gunIds,'DEF001',{durationSeconds:2,fps:30});
+const sameWeapon = clip('Z_same',gunIds,'DEF001',{durationSeconds:0.5,fps:60});
+const timedScore = value => matchClip(value,gun,[],reference);
+same([longWeapon,sameWeapon].sort((a,b)=>compareMatchScores(timedScore(a),timedScore(b))).map(c=>c.name),
+  ['Z_same','A_long'],'Matching companion durations break otherwise equal bone/source scores before filename order.');
+same([longWeapon,sameWeapon].sort((a,b)=>sortClipMatches(a,b,gun)).map(c=>c.name),
+  ['A_long','Z_same'],'No reference leaves the established sort unchanged.');
+same(compareMatchScores(timedScore(longWeapon),timedScore({...sameWeapon,binding:{boneNames:gunIds.slice(0,18)},boneCount:18}))<0,
+  true,'More covered joints still outrank a matching duration.');
+same(compareMatchScores(timedScore(longWeapon),timedScore({...sameWeapon,binding:{boneNames:[...gunIds,'extra']},boneCount:20}))<0,
+  true,'Fewer extra tracks still outrank a matching duration.');
+same(compareMatchScores(timedScore(longWeapon),timedScore({...sameWeapon,path:'C:/Other/Weapon.owanimclip'}))<0,
+  true,'Source-folder evidence retains its established priority.');
+same(compareMatchScores(timedScore(longWeapon),timedScore({...sameWeapon,binding:undefined}))<0,
+  true,'Unknown joint metadata does not outrank known matches because of timing.');
 console.log(`Clip matching: ${checks} checks passed.`);

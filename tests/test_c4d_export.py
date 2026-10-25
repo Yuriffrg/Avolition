@@ -119,7 +119,7 @@ class C4DExportTests(unittest.TestCase):
         expected[:, 2] *= -1
         actual = obj.tags[0].data[0]
         for corner, vertex in zip('abcd', [0, 2, 1, 1]):
-            np.testing.assert_allclose(actual[corner], expected[vertex], atol=1e-14)
+                np.testing.assert_allclose([actual[corner][axis] for axis in range(3)], expected[vertex], atol=1e-14)
 
     def test_invalid_normal_data_is_rejected_only_when_exporting_meshes(self):
         for normals in ([float('nan'),0,1], [float('inf'),0,1], [1,0]):
@@ -182,10 +182,56 @@ class C4DExportTests(unittest.TestCase):
         bridge = BridgeClient(self.queue)
         self.assertTrue(bridge.status()['connected'])
         self.assertIn('0.7.2', bridge.status()['message'])
-        with self.assertRaisesRegex(RuntimeError, r'bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.5'):
+        with self.assertRaisesRegex(RuntimeError, r'bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.10'):
             bridge.export({'mapInstances': True}, self.root/'out.c4d', self.root/'tex')
         self.assertFalse((self.queue/'jobs').exists())
         self.assertFalse((self.root/'out.c4d').exists())
+
+    def test_new_export_features_require_advertised_capabilities_before_job_creation(self):
+        for flag, capability in [('motionClip', 'combinedMotionClips'), ('motionClip', 'exactFrameTimes'),
+                                 ('gameplay1P', 'optimizedGameplay1P'), ('gameplay1P', 'povHeightZero'),
+                                 ('mapTiming24', 'mapTiming24')]:
+            for advertised in (None, False, 1, 'true'):
+                with self.subTest(flag=flag, advertised=advertised):
+                    bridge = BridgeClient(self.queue)
+                    status = dict(connected=True, octane=True, mapInstances=True,
+                                  bridgeVersion='0.7.6', instance='old',
+                                  motionClips=True, combinedMotionClips=True, exactFrameTimes=True,
+                                  optimizedGameplay1P=True, povHeightZero=True, mapTiming24=True)
+                    status[capability] = advertised
+                    payload = {flag: True, 'mapInstances': flag == 'mapTiming24'}
+                    with patch.object(bridge, 'status', return_value=status):
+                        with self.assertRaisesRegex(RuntimeError, r'updated motion clip and map timing support.*0\.7\.10'):
+                            bridge.export(payload, self.root/'out.c4d', self.root/'tex')
+                    self.assertFalse((self.queue/'jobs').exists(), 'Reject before writing a request or texture copy.')
+                    self.assertFalse((self.root/'out.c4d').exists())
+
+    def test_old_bridge_accepts_simple_payloads_and_new_bridge_accepts_requested_features(self):
+        scenarios = [('legacy', {}, {}),
+                     ('disabled', {'motionClip': False, 'mapTiming24': False, 'gameplay1P': False}, {}),
+                     ('motion', {'motionClip': True}, {'combinedMotionClips': True, 'exactFrameTimes': True}),
+                     ('gameplay', {'motionClip': True, 'gameplay1P': True},
+                      {'combinedMotionClips': True, 'exactFrameTimes': True, 'optimizedGameplay1P': True, 'povHeightZero': True}),
+                     ('map', {'mapInstances': True, 'mapTiming24': True}, {'mapTiming24': True})]
+        for name, payload, capabilities in scenarios:
+            with self.subTest(name=name):
+                queue = self.root/name
+                bridge = BridgeClient(queue)
+                status = dict(connected=True, octane=True, mapInstances=True, instance=name,
+                              bridgeVersion='0.7.10' if capabilities else '0.7.5', **capabilities)
+
+                def complete(_seconds):
+                    job = next((queue/'jobs').iterdir())
+                    self.assertEqual(json.loads((job/'payload.json').read_text(encoding='utf-8')), payload)
+                    (job/'scene.c4d').write_bytes(b'Native fixture')
+                    write_json(job/'result.json', {'ok': True, 'data': {'accepted': name}})
+
+                with patch.object(bridge, 'status', return_value=status), \
+                     patch('owpreview.c4d_bridge.time.sleep', side_effect=complete):
+                    result = bridge.export(payload, self.root/(name+'.c4d'), self.root/'tex', timeout=2)
+                self.assertEqual(result, {'accepted': name})
+                self.assertEqual((self.root/(name+'.c4d')).read_bytes(), b'Native fixture')
+                self.assertEqual(list((queue/'jobs').iterdir()), [])
 
     def test_queue_alias_keeps_existing_companions_discoverable(self):
         with patch.dict(os.environ, {'LOCALAPPDATA': str(self.root)}, clear=True):

@@ -16,7 +16,7 @@ def bundle(source, target):
     # The package/protocol name stays stable so existing exports and mailbox
     # discovery remain compatible across the product rename.
     (library/'__init__.py').write_text('"""Avolition native export companion."""\n', encoding='utf-8')
-    for name in ('c4d_bridge.py', 'c4d_scene.py', 'c4d_octane.py'):
+    for name in ('c4d_bridge.py', 'c4d_scene.py', 'c4d_octane.py', 'c4d_motion.py', 'c4d_pov.py'):
         shutil.copy2(source/'owpreview'/name, library/name)
     shutil.copy2(source/'LICENSE', destination/'LICENSE')
     return destination

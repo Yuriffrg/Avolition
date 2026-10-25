@@ -134,9 +134,10 @@ const report = {passed:false, executable, scratch, hidden:true, qaOnlyNoSandbox:
     && !document.querySelector('#export-animation-set').disabled);
   const queued=await page.evaluate(async()=>(await window.pywebview.api.bootstrap()).data.exportQueue);
   assert.equal(queued.length,1);assert.equal(queued[0].name,'Gameplay1P_Native UI combined 日本語');
+  assert.equal(queued[0].motionClipName,'Native UI combined 日本語','Combined rigs retain one exact motion nickname.');
   assert.equal(queued[0].entityPath,entity);assert.equal(queued[0].rootPath,assets);
   assert.deepEqual(queued[0].assignments,assignments,'The native queue stores both object animations and their source paths.');
-  assert.equal(await page.locator('#animation-set-name').inputValue(),'Gameplay1P_');
+  assert.equal(await page.locator('#animation-set-name').inputValue(),'','Adding resets the nickname field to blank.');
   const capture=await application.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
   fs.writeFileSync(path.join(scratch,'native-animation-set.png'),Buffer.from(capture,'base64'));
   await page.locator('#fbx-options-button').dispatchEvent('click');

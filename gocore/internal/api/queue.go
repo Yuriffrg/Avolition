@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"avolition/gocore/internal/ordered"
 	"avolition/gocore/internal/pycompat"
@@ -19,6 +20,28 @@ var queueIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 func nonEmptyString(value any) bool {
 	text, ok := value.(string)
 	return ok && text != ""
+}
+
+func validateMotionClipName(value any) (string, error) {
+	name, ok := value.(string)
+	if !ok || pycompat.Strip(name) == "" || runeLen(name) > 180 || strings.ContainsRune(name, '\x00') {
+		return "", newValueError("Enter a valid motion clip nickname (1–180 characters).")
+	}
+	return name, nil
+}
+
+// Legacy queue records stored only an automatically prefixed scene filename.
+// Strip that exact entity prefix once; explicit new nicknames are never guessed.
+func queueMotionClipName(entry *ordered.Map[any]) string {
+	if name, ok := get(entry, "motionClipName").(string); ok {
+		return name
+	}
+	name := get(entry, "name").(string)
+	prefix := pypath.Stem(get(entry, "entityPath").(string)) + "_"
+	if strings.HasPrefix(name, prefix) && len(name) > len(prefix) {
+		return name[len(prefix):]
+	}
+	return name
 }
 
 // exportQueueEntriesLocked is _export_queue_entries(): a validated deep copy.
@@ -61,6 +84,11 @@ func (a *API) exportQueueEntriesLocked() ([]any, error) {
 		if !valid {
 			return nil, invalid
 		}
+		if value, present := entry.Get("motionClipName"); present {
+			if _, err := validateMotionClipName(value); err != nil {
+				return nil, err
+			}
+		}
 		if _, err := a.deps.ObjectNames.ValidateNames(getOr(entry, "objectNames", ordered.New[any]()), nil); err != nil {
 			return nil, err
 		}
@@ -99,7 +127,7 @@ func tokenHex() string {
 // locally without exporting any files.
 func (a *API) ExportQueueSave(value any) (any, error) {
 	entry, ok := dictOf(value)
-	if !ok || !keysSubset(entry, "id", "name", "entityPath", "rootPath", "assignments", "objectNames") {
+	if !ok || !keysSubset(entry, "id", "name", "entityPath", "rootPath", "assignments", "objectNames", "motionClipName") {
 		return nil, newValueError("Invalid export list entry.")
 	}
 	ident := tokenHex()
@@ -122,6 +150,11 @@ func (a *API) ExportQueueSave(value any) (any, error) {
 		return nil, err
 	}
 	name = pypath.Stem(filename)
+	if value, present := entry.Get("motionClipName"); present {
+		if _, err := validateMotionClipName(value); err != nil {
+			return nil, err
+		}
+	}
 	entity, entityOK := get(entry, "entityPath").(string)
 	if !entityOK || !pycompat.IsAbs(entity) || !isEntitySuffix(entity) {
 		return nil, newValueError("Load an entity or model before adding an export.")
@@ -195,6 +228,9 @@ func (a *API) ExportQueueSave(value any) (any, error) {
 	record.Set("rootPath", pycompat.Resolve(root))
 	record.Set("assignments", captured)
 	record.Set("objectNames", namesToAny(validated))
+	if value, present := entry.Get("motionClipName"); present {
+		record.Set("motionClipName", value)
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	entries, err := a.exportQueueEntriesLocked()
@@ -316,6 +352,7 @@ func (a *API) ExportQueueRun(value, outputFolder, options any) (any, error) {
 	}
 	settings.Set("rootPath", get(snapshot, "rootPath"))
 	settings.Set("objectNames", getOr(snapshot, "objectNames", ordered.New[any]()))
+	settings.Set("motionClipName", queueMotionClipName(snapshot))
 	exportSet := a.ExportAnimationSet
 	if a.exportSetHook != nil {
 		exportSet = a.exportSetHook

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"avolition/gocore/internal/c4dexport"
 	"avolition/gocore/internal/jsoncmp"
 	"avolition/gocore/internal/oracle"
 	"avolition/gocore/internal/ordered"
@@ -117,11 +118,125 @@ func TestMapDispatchRechecksCapabilityBeforeCreatingAJob(t *testing.T) {
 		t.Fatal("status")
 	}
 	_, err := bridge.Export(obj("mapInstances", true), filepath.Join(root, "out.c4d"), filepath.Join(root, "tex"), ExportOptions{})
-	if err == nil || !regexp.MustCompile(`bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.5`).MatchString(err.Error()) {
+	if err == nil || !regexp.MustCompile(`bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.10`).MatchString(err.Error()) {
 		t.Fatalf("error %v", err)
 	}
 	if exists(filepath.Join(queue, "jobs")) || exists(filepath.Join(root, "out.c4d")) {
 		t.Fatal("job or output created")
+	}
+}
+
+func TestRequiredFeatureCapabilitiesAreCheckedBeforeCreatingAJob(t *testing.T) {
+	raw := ordered.New[json.RawMessage]()
+	raw.Set("motionClip", json.RawMessage("true"))
+	gameplayRaw := ordered.New[json.RawMessage]()
+	gameplayRaw.Set("gameplay1P", json.RawMessage("true"))
+	for _, scenario := range []struct {
+		name, capability string
+		payload          any
+	}{
+		{"motion-map", "combinedMotionClips", map[string]any{"motionClip": true}},
+		{"motion-ordered", "combinedMotionClips", obj("motionClip", true)},
+		{"motion-raw", "combinedMotionClips", raw},
+		{"motion-typed", "combinedMotionClips", &c4dexport.Payload{MotionClip: true}},
+		{"exact-frames-map", "exactFrameTimes", map[string]any{"motionClip": true}},
+		{"exact-frames-ordered", "exactFrameTimes", obj("motionClip", true)},
+		{"exact-frames-raw", "exactFrameTimes", raw},
+		{"exact-frames-typed", "exactFrameTimes", &c4dexport.Payload{MotionClip: true}},
+		{"gameplay-map", "optimizedGameplay1P", map[string]any{"gameplay1P": true}},
+		{"gameplay-ordered", "optimizedGameplay1P", obj("gameplay1P", true)},
+		{"gameplay-raw", "optimizedGameplay1P", gameplayRaw},
+		{"gameplay-typed", "optimizedGameplay1P", &c4dexport.Payload{MotionClip: true, Gameplay1P: true}},
+		{"height-map", "povHeightZero", map[string]any{"gameplay1P": true}},
+		{"height-ordered", "povHeightZero", obj("gameplay1P", true)},
+		{"height-raw", "povHeightZero", gameplayRaw},
+		{"height-typed", "povHeightZero", &c4dexport.Payload{MotionClip: true, Gameplay1P: true}},
+		{"map-timing", "mapTiming24", obj("mapInstances", true, "mapTiming24", true)},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			for _, advertised := range []any{nil, false, 1, "true"} {
+				root := t.TempDir()
+				queue := filepath.Join(root, "queue")
+				bridge := NewClient(queue)
+				bridge.statusFunc = func() *Status {
+					status := fakeStatus(true)()
+					status.Set("bridgeVersion", "0.7.6")
+					status.Set("motionClips", true)
+					status.Set("combinedMotionClips", true)
+					status.Set("exactFrameTimes", true)
+					status.Set("optimizedGameplay1P", true)
+					status.Set("povHeightZero", true)
+					status.Set("mapTiming24", true)
+					status.Set(scenario.capability, advertised)
+					return status
+				}
+				_, err := bridge.Export(scenario.payload, filepath.Join(root, "out.c4d"), filepath.Join(root, "tex"), ExportOptions{})
+				if err == nil || !strings.Contains(err.Error(), "updated motion clip and map timing support") || !strings.Contains(err.Error(), "0.7.10") {
+					t.Fatalf("advertised=%v: %v", advertised, err)
+				}
+				if exists(queue) || exists(filepath.Join(root, "out.c4d")) {
+					t.Fatal("unsupported export wrote a job or output")
+				}
+			}
+		})
+	}
+}
+
+func TestFeatureDispatchAndLegacyPayloadCompatibility(t *testing.T) {
+	for _, scenario := range []struct {
+		name         string
+		payload      any
+		capabilities []string
+	}{
+		{"legacy", obj("name", "Legacy scene"), nil},
+		{"disabled", obj("motionClip", false, "mapTiming24", false, "gameplay1P", false), nil},
+		{"motion", &c4dexport.Payload{MotionClip: true}, []string{"combinedMotionClips", "exactFrameTimes"}},
+		{"gameplay", &c4dexport.Payload{MotionClip: true, Gameplay1P: true}, []string{"combinedMotionClips", "exactFrameTimes", "optimizedGameplay1P", "povHeightZero"}},
+		{"map", obj("mapInstances", true, "mapTiming24", true), []string{"mapTiming24"}},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			root := t.TempDir()
+			queue := filepath.Join(root, "queue")
+			bridge := NewClient(queue)
+			bridge.statusFunc = func() *Status {
+				status := fakeStatus(true)()
+				status.Set("bridgeVersion", "0.7.5")
+				for _, capability := range scenario.capabilities {
+					status.Set(capability, true)
+					status.Set("bridgeVersion", "0.7.10")
+				}
+				return status
+			}
+			clock := 0.0
+			bridge.monotonic = func() float64 { return clock }
+			bridge.sleep = func(float64) {
+				clock++
+				job := filepath.Join(queue, "jobs", listDir(t, filepath.Join(queue, "jobs"))[0])
+				payload, err := ReadJSON(filepath.Join(job, "payload.json"), MaxPayload)
+				if err != nil {
+					t.Fatal(err)
+				}
+				want, err := Marshal(scenario.payload)
+				if err != nil {
+					t.Fatal(err)
+				}
+				jsoncmp.Equal(t, json.RawMessage(want), json.RawMessage(payload), jsoncmp.Options{})
+				os.WriteFile(filepath.Join(job, "scene.c4d"), []byte("Native fixture"), 0o644)
+				mustWrite(t, filepath.Join(job, "result.json"), obj("ok", true, "data", obj("accepted", scenario.name)))
+			}
+			timeout := 2.0
+			result, err := bridge.Export(scenario.payload, filepath.Join(root, "out.c4d"), filepath.Join(root, "tex"), ExportOptions{Timeout: &timeout})
+			if err != nil {
+				t.Fatal(err)
+			}
+			jsoncmp.Equal(t, mustJSON(map[string]string{"accepted": scenario.name}), result, jsoncmp.Options{})
+			if got, _ := os.ReadFile(filepath.Join(root, "out.c4d")); string(got) != "Native fixture" {
+				t.Fatal("scene not published")
+			}
+			if len(listDir(t, filepath.Join(queue, "jobs"))) != 0 {
+				t.Fatal("job not cleaned up")
+			}
+		})
 	}
 }
 

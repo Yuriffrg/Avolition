@@ -1,4 +1,144 @@
-# Handoff: 0.8.24, PNG export compatibility
+# Handoff: 0.8.29, Gameplay1P clavicles start at zero Y
+
+## 0.8.29 follow-up
+
+After Gameplay1P hierarchy cleanup and before Motion Source creation, each
+clavicle's local Y curve is offset by its own frame-zero value. Every Y key,
+its time and its change relative to the first frame are retained. X/Z and
+rotation curves are unchanged. Static rigs start at Y=0 without added tracks.
+This intentionally lowers the arms and their attached weapon; Joints and the
+original skin bind state receive no compensating height offset.
+
+The existing hierarchy/skin checks run before the intentional height shift.
+The offset stage verifies the expected per-arm translation and skin-weighted
+deformation. Non-Gameplay1P exports, nickname-based combined clips, no-scale
+tracks, exact source FPS and 24 FPS static maps retain their existing behavior.
+App 0.8.29 requires the povHeightZero capability from bridge 0.7.10 for
+Gameplay1P exports so an older bridge cannot silently omit this step.
+
+Bridge 0.7.10 is installed with all nine files verified. The previous 0.7.9 copy
+is backed up outside plugin search paths. After restarting Cinema 4D, a real
+saved Widowmaker arms/weapon setup and independent-rig fixture exported through
+the installed bridge successfully. See VALIDATION.md for the native key-by-key
+comparison and automated check results.
+
+The earlier release notes below are historical.
+
+## 0.8.28 follow-up
+
+Animation documents retain their source FPS (combined setups use the highest
+assigned FPS while preserving each clip's duration). Frame keys, document ranges,
+Motion Sources and Motion Clips now use rational frame/FPS times throughout.
+Cinema's seconds-only BaseTime constructor rounded frame 49 at 30 FPS to 48.99;
+the new code keeps it exactly 49 F, with a 50-frame inclusive clip length. Static
+maps retain 24 FPS and the necessary 0–1 F project/preview range.
+
+Gameplay1P identity comes from the original source filename, and hero names come
+from the Heroes/<hero> source directory. User display renames cannot trigger the
+cleanup. The top entity null takes the hero name when available. Before creating
+the Motion Source, the native exporter bakes inherited clavicle motion, promotes
+Clavicle_L/R below a skeleton null named Joints, and removes unused joints and
+empty helper nulls. Following the user's choice, meshes weighted entirely to the
+camera branch are omitted along with their now-unused joints. Meshes with mixed
+camera/arm weights and necessary attachments remain intact with a warning.
+
+Cleanup verifies every retained object's world motion at every exported frame,
+the original skin weights/bind state, and deformed mesh points at start/mid/end.
+It never recalculates binding at an animated pose. The combined native Motion
+Source/Clip still uses the exact nickname, on Layer 0, with no scale tracks.
+Other entity types retain their original hierarchy.
+
+App 0.8.28 requires bridge 0.7.9 capabilities exactFrameTimes for Motion Clip
+exports and optimizedGameplay1P for the special rig cleanup. c4d_pov.py is a
+stdlib-only native companion module and must be included in bridge bundles.
+Native Cinema 4D 2026/Octane tests passed real Widowmaker single/combined exports,
+30/60 FPS exact frame boundaries, independent rigs and a static map fixture.
+Bridge 0.7.9 is installed and hash-verified, with 0.7.8 backed up outside plugin
+search paths. After restart, the installed bridge exported a real persisted
+Widowmaker arms/weapon setup and passed the independent-rig native fixture.
+See VALIDATION.md for evidence. The user confirmed the removed Widowmaker cards
+are HUD effects; the verified scene has no joints outside the clavicle branches.
+
+The earlier release notes below are historical.
+
+## 0.8.27 follow-up
+
+Animation nickname is now a separate saved value (`motionClipName`) from the
+generated scene filename. Typing `Reload` creates `Gameplay1P_Reload.c4d`, but
+both the Motion Source and Motion Clip are named exactly `Reload`. The input
+starts/resets blank. Names retain casing, Unicode and underscores; an explicitly
+typed entity prefix remains part of a new nickname. Legacy queue entries without
+the new field remove only their exact known entity prefix once. Later annotation
+edits do not change saved setup names.
+
+One combined setup now creates one source, one Motion System tag and one clip on
+`Layer 0`. Nested arms/weapon rigs use the outer Skeleton null. Independent rigs
+share a `Joints` parent; grouping preserves world/bind transforms, and verification
+compares all original object poses before/after grouping and native conversion.
+Connector hierarchy is retained; unrelated meshes and unassigned rig branches
+are omitted from the motion source. Scale tracks remain absent.
+
+App 0.8.27 requires the `combinedMotionClips` capability from bridge 0.7.8. That
+bridge is installed, hash-verified and tested after restarting Cinema 4D. Real
+Widowmaker arms/weapon exports and independent-rig fixtures have one `Reload`
+source/clip after save/reload. The previous release notes below are historical.
+
+## 0.8.26 follow-up
+
+Motion System tags now belong to the animated model's Skeleton null, identified
+from the export hierarchy rather than its display name. Each animated rig gets
+its own Motion Source and Clip. Sources contain only their own skeleton and
+joints, excluding attached entities and other rigs. A single rig keeps the export
+name; multiple rigs add their skeleton names to distinguish the clips.
+
+Animation exports create only position/rotation keys. Scale remains at each
+joint's first animation-frame value, with no scale CTracks in either the scene
+or Motion Sources. Authored scale changes produce a warning because they are
+intentionally omitted. Native save/reload checks reject scale tracks and verify
+the nested Motion System tag owners, source links and sampled poses.
+
+The app is 0.8.26 and the bundled bridge is 0.7.7. The new
+`skeletonMotionClips` capability prevents an older bridge from silently producing
+the previous layout. Bridge 0.7.7 is installed with a verified backup of 0.7.6;
+after restarting Cinema 4D, the packaged app exported an animation and map through
+it successfully. Real Widowmaker arms-only and arms/weapon exports passed native
+checks; see `VALIDATION.md`. The previous release notes below are historical.
+
+## 0.8.25 follow-up
+
+- Animations has a **POV cam** viewport option, off by default. It follows an
+  available Camera joint, including its animation and parent transforms; selecting
+  an attached weapon retains the owning arms camera. Turning it off restores the
+  orbit view. Entities without a Camera joint and map views retain normal navigation.
+  This is a preview option and does not add an exported camera.
+- In **For selected object** sorting, equally relevant bone matches favor clips
+  matching another assigned object's duration within one frame. An assigned parent
+  rig is preferred as the reference for an attached weapon. Source and bone relevance
+  remain ahead of duration, and explicit alternative sorts remain unchanged.
+- Static map documents use **24 FPS**, current time 0 F, and project/preview ranges
+  **0–1 F**. Cinema 4D turns a 0–0 F range into −1–0 F, so the one-frame range is
+  necessary to keep both minima at zero. Animation exports retain their clip FPS.
+- Animated exports create a native Motion Clip and Motion Source named after the
+  export. Position, Rotation and Parameter tracks are included and removed from the
+  original hierarchy; Scale and PLA are excluded and retained. Expressions are not
+  baked and pictures are not created. Save/reload verification checks the source,
+  clip links, timing and sampled joint poses against the original animation.
+
+These exports require bundled **Avolition C4D Bridge 0.7.6**. Both Go and Python
+clients check its capabilities. The installed bridge was updated to 0.7.6 after
+Cinema 4D closed, with all eight bundled files hash-verified and the previous
+plugin backed up outside the plugin search path. After restart, the packaged Go
+app exported an animation and map successfully through the installed plugin.
+The larger native checks used an isolated temporary 0.7.6 service in Cinema 4D
+2026 with Octane. All checks operated on detached documents.
+
+Real Widowmaker animation and full Colosseo map exports passed native save/reload
+checks. See `VALIDATION.md` and
+`../preview-build/avolition-v0825-qa/real-native-export-report.json`. The existing
+Windows external-Python-service map oracle race remains separate from these
+successful native exports. The Go backend migration notes below are historical.
+
+## 0.8.24 PNG export compatibility
 
 Windows follow-up: see `VALIDATION.md` for native build, renderer, real-map, game-extraction and differential results. Version 0.8.24 fixes publishing Go-baked PNGs over equivalent Python-baked textures. The actual Colosseo map now exports successfully through live C4D/Octane, with all existing output files preserved. The broader Windows Go suite still has unresolved compatibility-test failures. The Linux results below are not a Windows release sign-off.
 

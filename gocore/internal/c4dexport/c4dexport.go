@@ -80,13 +80,30 @@ type Animation struct {
 
 // Payload is the bridge protocol 1 scene payload.
 type Payload struct {
-	Version     int            `json:"version"`
-	Asset       *formats.Asset `json:"asset"`
-	Materials   *Materials     `json:"materials"`
-	Warnings    []string       `json:"warnings"`
-	IncludeMesh bool           `json:"includeMesh"`
-	Name        string         `json:"name"`
-	Animation   Animation      `json:"animation"`
+	Version        int            `json:"version"`
+	Asset          *formats.Asset `json:"asset"`
+	Materials      *Materials     `json:"materials"`
+	Warnings       []string       `json:"warnings"`
+	IncludeMesh    bool           `json:"includeMesh"`
+	Name           string         `json:"name"`
+	MotionClip     bool           `json:"motionClip"`
+	MotionClipName string         `json:"motionClipName"`
+	Gameplay1P     bool           `json:"gameplay1P"`
+	HeroName       string         `json:"heroName"`
+	Animation      Animation      `json:"animation"`
+}
+
+// RequiredBridgeCapabilities prevents older companions creating separate
+// sources per skeleton instead of one combined source named with the nickname.
+func (p *Payload) RequiredBridgeCapabilities() []string {
+	var required []string
+	if p.MotionClip {
+		required = append(required, "combinedMotionClips", "exactFrameTimes")
+	}
+	if p.Gameplay1P {
+		required = append(required, "optimizedGameplay1P", "povHeightZero")
+	}
+	return required
 }
 
 func valueError(message string) error { return errors.New(message) }
@@ -513,7 +530,9 @@ type PayloadOptions struct {
 	RootMotion  bool
 	// ClipName overrides clip.Name when not empty (clip_name or clip['name']).
 	ClipName string
-	RigID    string
+	// MotionClipName is the user nickname, independently of the scene filename.
+	MotionClipName string
+	RigID          string
 	// ScopeModelID selects one object (select_model_asset) when not nil.
 	ScopeModelID *string
 }
@@ -665,8 +684,14 @@ func MakePayload(asset *formats.Asset, clip *formats.Clip, materials *Materials,
 	if name == "" {
 		name = clip.Name
 	}
+	motionName := opts.MotionClipName
+	if motionName == "" {
+		motionName = name
+	}
+	gameplay1P, heroName := SourceIdentity(asset.Path)
 	return &Payload{Version: 1, Asset: native, Materials: orEmpty(materials), Warnings: copyStrings(native.Warnings),
-		IncludeMesh: opts.IncludeMesh, Name: name,
+		IncludeMesh: opts.IncludeMesh, Name: name, MotionClip: len(tracks) > 0, MotionClipName: motionName,
+		Gameplay1P: gameplay1P, HeroName: heroName,
 		Animation: Animation{FPS: fps, LastFrame: last, Tracks: tracks, MatchedBones: matched}}, nil
 }
 
@@ -680,9 +705,10 @@ type Assignment struct {
 // SetOptions are make_set_payload's keyword arguments (Python defaults:
 // IncludeMesh and RootMotion true, Name "Animation set").
 type SetOptions struct {
-	IncludeMesh bool
-	RootMotion  bool
-	Name        string
+	IncludeMesh    bool
+	RootMotion     bool
+	Name           string
+	MotionClipName string
 }
 
 // DefaultSetOptions are Python's keyword defaults.
@@ -838,8 +864,14 @@ func MakeSetPayload(asset *formats.Asset, assignments []Assignment, materials *M
 			return nil, err
 		}
 	}
+	motionName := opts.MotionClipName
+	if motionName == "" {
+		motionName = opts.Name
+	}
+	gameplay1P, heroName := SourceIdentity(asset.Path)
 	return &Payload{Version: 1, Asset: native, Materials: orEmpty(materials), Warnings: copyStrings(native.Warnings),
-		IncludeMesh: opts.IncludeMesh, Name: opts.Name,
+		IncludeMesh: opts.IncludeMesh, Name: opts.Name, MotionClip: len(tracks) > 0, MotionClipName: motionName,
+		Gameplay1P: gameplay1P, HeroName: heroName,
 		Animation: Animation{FPS: fps, LastFrame: last, DurationSeconds: &duration, Tracks: tracks,
 			Assignments: summaries, MatchedBones: matchedTotal}}, nil
 }

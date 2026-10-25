@@ -56,6 +56,7 @@ export function createExportQueue(api, hooks) {
   async function add(snapshot) {
     if (busy()) throw new Error('Wait for the current export-list operation to finish.');
     const same = entries.find(entry => entry.name === snapshot.name && entry.entityPath === snapshot.entityPath && entry.rootPath === snapshot.rootPath
+      && entry.motionClipName === snapshot.motionClipName
       && JSON.stringify(entry.assignments) === JSON.stringify(snapshot.assignments)
       && JSON.stringify(entry.objectNames || {}) === JSON.stringify(snapshot.objectNames || {}));
     if (same) return {entry:same, existing:true};

@@ -256,7 +256,7 @@ func TestNoLegacyCatalogStartsClean(t *testing.T) {
 	a := desktop(t, "")
 	restored := s.data(t, a)
 	assertJSON(t, restored["catalog"], map[string]any{})
-	if restored["browserMode"] != false || restored["appName"] != "Avolition" || restored["version"] != "0.8.24" {
+	if restored["browserMode"] != false || restored["appName"] != "Avolition" || restored["version"] != "0.8.29" {
 		t.Fatalf("bootstrap: %v", restored)
 	}
 	ok(t, call(t, a, "save_annotation", s.clip, s.annotation))

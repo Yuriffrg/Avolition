@@ -1,7 +1,7 @@
 import { PreviewViewport } from './viewer.js';
 import { ObjectVisibilityMenu } from './object-menu.js';
 import { visibleClips } from './library-clips.js';
-import { modelContext, matchClip, compareMatchScores, indexOccurrences } from './clip-matching.js';
+import { modelContext, matchClip, compareMatchScores, indexOccurrences, assignmentDurationReference } from './clip-matching.js';
 import { createExportQueue } from './export-queue.js';
 import { initToolchain, sameDirectory } from './toolchain.js';
 import { initMaps } from './maps.js';
@@ -108,6 +108,11 @@ function libraryContext() {
   return state.entityLoaded && model ? modelContext(model, state.loadedEntityPath) : null;
 }
 
+function libraryDurationReference() {
+  return state.entityLoaded && state.activeModelId && $('clip-sort').value === 'object-match'
+    ? assignmentDurationReference(state.assignments, state.activeModelId, state.matchModels) : null;
+}
+
 function libraryObjectLabel(model) {
   const context = modelContext(model, state.loadedEntityPath);
   // Perspective identifies the root character only. Attached objects keep their
@@ -135,6 +140,8 @@ function updateMatchingStatus() {
   else {
     const unknown = state.clips.filter(clip => !clip.error && !Array.isArray(clip.binding?.boneNames)).length;
     status.textContent = `Bars show bones covered on this object.${unknown ? ` ${unknown.toLocaleString()} unavailable.` : ''}`;
+    const reference = libraryDurationReference();
+    if (reference) status.textContent += ` Equal bone matches favor ${reference.seconds.toFixed(2)} s clips.`;
   }
 }
 
@@ -201,8 +208,9 @@ function renderLibrary({ reveal = false } = {}) {
   const matching = visibleClips(state.clips, {query, hideDuplicates:$('hide-duplicates').checked,
     selectedPath:state.selectedPath, entityPath:state.loadedEntityPath});
   const context = libraryContext(); state.matchContext = context;
+  const durationReference = libraryDurationReference();
   state.filtered = matching;
-  state.matchScores = new Map(context ? state.filtered.map(clip => [clip.path,matchClip(clip,context,state.occurrences)]) : []);
+  state.matchScores = new Map(context ? state.filtered.map(clip => [clip.path,matchClip(clip,context,state.occurrences,durationReference)]) : []);
   updateLibraryObjectControl(); updateMatchingStatus();
   state.filtered.sort((a, b) => {
     let compared = 0;
@@ -258,6 +266,7 @@ function renderLibrary({ reveal = false } = {}) {
     row.append(main, numbers);
     if (context) {
       const score = state.matchScores.get(clip.path);
+      if (score.durationMatch) row.title += `\nDuration matches ${clipName(durationReference.clip)} on another object (within one frame).`;
       const coverage = document.createElement('span'); coverage.className = 'clip-coverage';
       const label = document.createElement('span'); label.className = 'clip-coverage-label';
       label.textContent = score.known ? `${score.matched} / ${score.totalBoneCount} bones covered${score.sameModelFolder ? ' · Model folder' : ''}`
@@ -494,9 +503,9 @@ async function loadEntity(path) {
     state.matchModels = asset.models || [];
     objectMenu.setSceneName(sourceName(path).replace(/\.(owentity|owmdl)$/i, ''), path);
     objectMenu.setNames(asset.objectNames || {});
-    $('animation-set-name').value = sourceName(path).replace(/\.(owentity|owmdl)$/i, '') + '_';
+    $('animation-set-name').value = '';
     $('animation-set-export-status').textContent = '';
-    $('animation-set-name').placeholder = sourceName(path).replace(/\.(owentity|owmdl)$/i, '') + '_nickname';
+    $('animation-set-name').placeholder = 'Animation nickname';
     $('viewport-empty').hidden = true;
     $('scene-name').textContent = sourceName(path);
     $('scene-name').title = path;
@@ -599,10 +608,11 @@ async function addAnimationSet() {
   if (!state.entityLoaded || !state.assignments.size || state.clipLoadPromise || state.queueAddPromise || exportQueue.busy() || state.closing) return;
   const input = $('animation-set-name'), status = $('animation-set-export-status');
   const prefix = sourceName(state.loadedEntityPath).replace(/\.(owentity|owmdl)$/i, '') + '_';
-  let name = input.value.trim().replace(/\.c4d$/i, '');
-  if (!name || name === prefix) { status.textContent = 'Enter a nickname for this animation setup.'; status.classList.add('error'); input.focus(); return; }
+  const motionClipName = input.value.trim().replace(/\.c4d$/i, '');
+  let name = motionClipName;
+  if (!name) { status.textContent = 'Enter a nickname for this animation setup.'; status.classList.add('error'); input.focus(); return; }
   if (!name.startsWith(prefix)) name = prefix + name;
-  const snapshot = {name, entityPath:state.loadedEntityPath, rootPath:state.loadedEntityRoot,
+  const snapshot = {name, motionClipName, entityPath:state.loadedEntityPath, rootPath:state.loadedEntityRoot,
     assignments:[...state.assignments].map(([modelId, clip]) => ({modelId, clipPath:clip.path}))};
   const entityAtStart = state.loadedEntityPath;
   const namedClipPath = state.selectedPath;
@@ -613,9 +623,9 @@ async function addAnimationSet() {
       snapshot.objectNames = state.loadedEntityPath === entityAtStart ? {...objectMenu.names} : await api('object_names', entityAtStart);
       const result = await exportQueue.add(snapshot);
       // Keep library nickname search useful; the queue owns its independent name.
-      annotationChanged({name:name.slice(prefix.length)}, namedClipPath);
+      annotationChanged({name:motionClipName}, namedClipPath);
       await flushAllAnnotations();
-      if (state.loadedEntityPath === entityAtStart) input.value = prefix;
+      if (state.loadedEntityPath === entityAtStart) input.value = '';
       status.textContent = `${result.existing ? 'Already in' : 'Added to'} export list: ${result.entry.name}.c4d. Open Export Manager to select and save it.`;
       setStatus(status.textContent);
       return true;
@@ -975,7 +985,7 @@ function resumeAfterClosePreparation() {
   $('check-c4d').disabled = !state.ready || state.c4dStatusPending;
   $('scan-root').textContent = 'Scan folder ↗';
   $('load-entity').disabled = !state.ready || !viewport || !$('entity-select').value;
-  if (viewport) viewport.controls.enabled = true;
+  if (viewport) viewport.controls.enabled = !viewport.getPOVStatus().active;
   startHeartbeat();
   toolchainUI?.resume();
   renderAnimationSet();
@@ -1073,12 +1083,18 @@ async function closeApp() {
 
 function setOptions() {
   viewport?.setOptions({ grid: $('show-grid').checked, skeleton: $('show-skeleton').checked,
-    wireframe: $('show-wireframe').checked, lockRoot: $('lock-root').checked, textured: $('show-textures').checked });
+    wireframe: $('show-wireframe').checked, lockRoot: $('lock-root').checked, textured: $('show-textures').checked,
+    pov: $('pov-camera').checked });
   updateMaterialStatus();
   if (hasTimeline()) viewport?.setFrame(state.frame, timelineFPS());
 }
 
 function updateMaterialStatus(pending = '') {
+  const pov = viewport?.getPOVStatus();
+  $('pov-status').hidden = !$('pov-camera').checked;
+  $('pov-status').textContent = pov?.active ? 'POV cam follows the animated Camera joint.'
+    : 'POV cam needs an entity with a Camera joint, such as Gameplay1P arms.';
+  $('viewport').parentElement.querySelector('.navigation-hint').hidden = Boolean(pov?.active);
   const stats = state.materialStats;
   const enabled = $('show-textures').checked;
   const count = stats?.texturedMeshes || 0;
@@ -1175,7 +1191,7 @@ $('frame-input').addEventListener('change', () => { setPlaying(false); seek($('f
 $('frame-input').addEventListener('keydown', (event) => { if (event.key === 'Enter') $('frame-input').blur(); });
 $('loop-toggle').addEventListener('click', () => { state.loop = !state.loop; $('loop-toggle').setAttribute('aria-pressed', String(state.loop)); $('loop-toggle').classList.toggle('is-active', state.loop); });
 $('playback-speed').addEventListener('change', () => { state.speed = Number($('playback-speed').value) || 1; });
-for (const id of ['show-grid', 'show-skeleton', 'show-wireframe', 'lock-root', 'show-textures']) $(id).addEventListener('change', setOptions);
+for (const id of ['show-grid', 'show-skeleton', 'show-wireframe', 'lock-root', 'show-textures', 'pov-camera']) $(id).addEventListener('change', setOptions);
 $('rig-select').addEventListener('change', () => selectObject($('rig-select').value));
 $('library-object').addEventListener('change', () => selectObject($('library-object').value));
 $('clear-object-animation').addEventListener('click', clearObjectAnimation);

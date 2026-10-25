@@ -1,4 +1,28 @@
-Avolition C4D Bridge — 0.7.5
+Avolition C4D Bridge — 0.7.10
+
+Animations use their source FPS (the highest assigned FPS in a combined setup).
+Keys and Motion Clip ranges retain exact whole frames at 30/60 FPS.
+Gameplay1P exports use the hero name for the top null and promote the two
+clavicles below Joints after baking their inherited motion. Unused joints,
+empty helpers and camera-only HUD meshes are omitted. Mixed-weight meshes and
+necessary attachments are preserved. Skin binding and visible motion are checked
+before and after cleanup. Other entity hierarchies are unchanged.
+
+For Gameplay1P, each clavicle's local Y animation is offset by its own first
+frame value. Both start at Y=0 while retaining every Y key and all vertical
+motion relative to frame zero. The arms and attached weapon move with the rig;
+there is no compensating height offset on Joints or a frozen transform.
+
+Each animation setup becomes one Motion Source and one Motion Clip, named
+exactly with its Avolition nickname, on Layer 0. Attached arms and weapon rigs
+share their outer Skeleton's Motion System. Independent skeletons share a
+Joints parent, with world transforms preserved. Position, rotation and parameter
+animation move into the source. Scale CTracks are never created; first-frame
+scale stays static. PLA, expression baking and preview pictures are disabled.
+The saved scene is reopened and checked for source links, keys and joint poses.
+
+Static maps use 24 FPS, current time 0, and project/preview ranges 0 to 1 F.
+Cinema 4D requires a nonempty range; 0 to 0 F shifts Time Min to -1 F.
 
 Large maps reuse identical Octane material graphs across object bindings.
 Static scenes are evaluated once before saving and once after reopening for
@@ -17,8 +41,9 @@ UPDATE FROM AN EARLIER BRIDGE
 
 The companion now uses Avolition's official name. Its private plugin ID,
 internal whitehound_c4d package and local bridge storage stay compatible.
-Earlier animation exports remain compatible. This update advertises map
-export support to Avolition so the map export availability check succeeds.
+Earlier animation exports remain compatible. This update advertises skeletal
+motion clips and 24 FPS map timing so Avolition can verify that the running
+companion supports the requested export.
 
 Static map scenes use compact shared geometry over the local bridge. Map
 placements retain translation, rotation, signed/nonuniform scale,
@@ -46,7 +71,7 @@ existing files are preserved by adding a collision suffix.
 
 The native scene contains the entity importer's readable joint names,
 entity/model/skeleton hierarchy, centimetre geometry, skin weights,
-sampled PSR animation and editable Octane Universal materials. Static maps
+sampled position/rotation animation and editable Octane Universal materials. Static maps
 contain no invented animation tracks. C4D uses Y up. Keep tex with the scene.
 
 The bridge creates, verifies and closes a separate document. It does not

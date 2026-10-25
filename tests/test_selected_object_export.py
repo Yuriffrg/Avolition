@@ -143,7 +143,7 @@ class SelectedObjectExportTests(unittest.TestCase):
         self.assertEqual(report['meshCount'], 1)
         self.assertEqual(report['boneCount'], 2)
         self.assertEqual(report['skinCount'], 1)
-        self.assertEqual(report['trackCount'], 18)
+        self.assertEqual(report['trackCount'], 12)
         self.assertTrue(report['verifiedNativeScene'])
         root = native.saved[0].roots[0]
         self.assertEqual(root.name, 'gun_Entity')

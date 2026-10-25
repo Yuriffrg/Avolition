@@ -5,7 +5,7 @@ import { PreviewViewport, DEFAULT_VIEW_OPTIONS } from '../web/viewer.js';
 import { createPoseEvaluator } from '../web/pose.js';
 
 let checks = 0, maximumError = 0;
-assert.deepEqual(DEFAULT_VIEW_OPTIONS, {grid: true, skeleton: false, wireframe: false, lockRoot: false, textured: true}); checks++;
+assert.deepEqual(DEFAULT_VIEW_OPTIONS, {grid: true, skeleton: false, wireframe: false, lockRoot: false, textured: true, pov: false}); checks++;
 const quaternion = (x, y, z) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z, 'ZYX')).toArray();
 const transform = (position, rotation) => new THREE.Matrix4().compose(
   new THREE.Vector3(...position), new THREE.Quaternion(...rotation), new THREE.Vector3(1, 1, 1),

@@ -30,10 +30,10 @@ class BridgePluginBundleTests(unittest.TestCase):
         self.assertEqual([p.name for p in output.glob('*.pyp')], ['Avolition C4D Bridge.pyp'])
         self.assertFalse((self.target / 'Whitehound C4D Bridge').exists())
         self.assertTrue((output / 'LICENSE').is_file())
-        for name in ('c4d_bridge.py', 'c4d_scene.py', 'c4d_octane.py'):
+        for name in ('c4d_bridge.py', 'c4d_scene.py', 'c4d_octane.py', 'c4d_motion.py', 'c4d_pov.py'):
             self.assertEqual((output / 'whitehound_c4d' / name).read_bytes(), (SOURCE / 'owpreview' / name).read_bytes())
         readme = (output / 'README.txt').read_text(encoding='utf-8')
-        self.assertIn('Avolition C4D Bridge — 0.7.5', readme)
+        self.assertIn('Avolition C4D Bridge — 0.7.10', readme)
         self.assertIn('renaming an old folder inside plugins does not disable it', readme)
 
     def test_bundle_refuses_legacy_copy_without_deleting_it(self):
@@ -81,8 +81,9 @@ class BridgePluginBundleTests(unittest.TestCase):
         self.assertEqual(len(registrations), 1)
         ident, name, flags, plugin = registrations[0]
         self.assertEqual((ident, name, flags), (PLUGIN_ID, 'Avolition C4D Bridge', 0))
-        expected = dict(bridgeVersion='0.7.5', bridgeName='Avolition C4D Bridge', pluginPath=str(output.resolve()),
-                        cinemaVersion=2026302, mapInstances=True, octane=True)
+        expected = dict(bridgeVersion='0.7.10', bridgeName='Avolition C4D Bridge', pluginPath=str(output.resolve()),
+                        cinemaVersion=2026302, mapInstances=True, motionClips=True, skeletonMotionClips=True, combinedMotionClips=True,
+                        mapTiming24=True, exactFrameTimes=True, optimizedGameplay1P=True, povHeightZero=True, octane=True)
         self.assertEqual(entry['capabilities'](), expected)
         self.assertEqual(plugin.GetTimer(), 1000)
         self.assertTrue(plugin.CoreMessage(100, None))

@@ -64,6 +64,8 @@ type StaticPayload struct {
 	Warnings     []string       `json:"warnings"`
 }
 
+func (p *StaticPayload) RequiredBridgeCapabilities() []string { return []string{"mapTiming24"} }
+
 // MarshalJSON writes the asset with formats.AppendAssetJSON (no reflection
 // over the geometry arrays).
 func (p *StaticPayload) MarshalJSON() ([]byte, error) {
@@ -85,7 +87,7 @@ func (p *StaticPayload) MarshalJSON() ([]byte, error) {
 		key   string
 		value any
 	}{{"name", p.Name}, {"materials", materials}, {"includeMesh", p.IncludeMesh},
-		{"mapInstances", p.MapInstances}, {"animation", p.Animation}, {"warnings", p.Warnings}} {
+		{"mapInstances", p.MapInstances}, {"mapTiming24", true}, {"animation", p.Animation}, {"warnings", p.Warnings}} {
 		dst = append(dst, ',')
 		dst = appendJSON(dst, part.key)
 		dst = append(dst, ':')
@@ -198,7 +200,7 @@ func MakeStaticPayload(asset *formats.Asset, materials *Materials, name string) 
 		materials = ordered.New[*ordered.Map[*formats.Material]]()
 	}
 	return &StaticPayload{Version: 1, Asset: prepared, Name: name, Materials: materials, IncludeMesh: true,
-		MapInstances: true, Animation: Animation{FPS: 30, Tracks: []any{}},
+		MapInstances: true, Animation: Animation{FPS: 24, Tracks: []any{}},
 		Warnings: slices.Clone(prepared.Warnings)}, nil
 }
 
@@ -352,6 +354,9 @@ func ExportMap(asset *formats.Asset, outputFolder string, sceneName *string, opt
 	}
 	if !status.MapInstances() {
 		return nil, runtimeError(c4dbridge.MapBridgeMessage(status))
+	}
+	if !status.MapTiming24() {
+		return nil, runtimeError(c4dbridge.FeatureBridgeMessage)
 	}
 	progress := opts.Progress
 	if progress != nil {

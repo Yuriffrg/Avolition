@@ -124,6 +124,9 @@ func payloadCase(t *testing.T, label string, asset *formats.Asset, clip *formats
 	if opts.ClipName != "" {
 		kwargs["clip_name"] = opts.ClipName
 	}
+	if opts.MotionClipName != "" {
+		kwargs["motion_clip_name"] = opts.MotionClipName
+	}
 	if opts.ScopeModelID != nil {
 		kwargs["scope_model_id"] = *opts.ScopeModelID
 	}
@@ -155,8 +158,40 @@ func setCase(t *testing.T, label string, asset *formats.Asset, list []c4dexport.
 	}
 	return oracleCase{label: label, kind: "set",
 		args:   []any{exporttest.PyJSON(t, asset), pyAssignments, pyMaterials},
-		kwargs: kw(opts.IncludeMesh, opts.RootMotion, "name", opts.Name),
+		kwargs: kw(opts.IncludeMesh, opts.RootMotion, "name", opts.Name, "motion_clip_name", opts.MotionClipName),
 		run:    func() (any, error) { return c4dexport.MakeSetPayload(asset, list, materials, opts) }}
+}
+
+func TestMotionNicknameSurvivesBuildersAndOptimizedJSON(t *testing.T) {
+	asset, clip := exporttest.SelectedFixture(t)
+	setAsset, list := exporttest.AssignedFixture(t)
+	var cases []oracleCase
+	for _, nickname := range []string{"Reload", "ADS_Up", "装填_左", "Gameplay1P_Reload"} {
+		opts := c4dexport.DefaultPayloadOptions()
+		opts.ClipName, opts.MotionClipName = "Gameplay1P_"+nickname, nickname
+		cases = append(cases, payloadCase(t, nickname+" single", asset, clip, nil, opts))
+		setOpts := c4dexport.DefaultSetOptions()
+		setOpts.Name, setOpts.MotionClipName = "Gameplay1P_"+nickname, nickname
+		cases = append(cases, setCase(t, nickname+" combined", setAsset, assignments(list), nil, setOpts))
+	}
+	runCases(t, cases)
+	for _, item := range cases {
+		value, err := item.run()
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var payload map[string]any
+		if err = json.Unmarshal(encoded, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["motionClipName"] != item.kwargs["motion_clip_name"] {
+			t.Fatalf("Nickname lost in optimized JSON: %s", encoded)
+		}
+	}
 }
 
 func loadEntity(t *testing.T, root, entity string) *formats.Asset {
@@ -637,17 +672,19 @@ func TestNativeSceneAcceptsGoPayloads(t *testing.T) {
 	}
 	// tests/test_combined_export.py native checks on the Go payload.
 	set := results[2][0].Report
-	for key, want := range map[string]float64{"meshCount": 3, "boneCount": 6, "skinCount": 3, "trackCount": 36, "frameCount": 31} {
+	// Each animated joint carries three position and three rotation tracks;
+	// scale stays static and has no CTrack in the scene or its motion source.
+	for key, want := range map[string]float64{"meshCount": 3, "boneCount": 6, "skinCount": 3, "trackCount": 24, "frameCount": 31} {
 		if set[key] != want {
 			t.Errorf("set %s = %v, want %v", key, set[key], want)
 		}
 	}
 	noMeshes := results[3][0].Report
-	if noMeshes["meshCount"] != 0.0 || noMeshes["boneCount"] != 6.0 || noMeshes["trackCount"] != 36.0 {
+	if noMeshes["meshCount"] != 0.0 || noMeshes["boneCount"] != 6.0 || noMeshes["trackCount"] != 24.0 {
 		t.Errorf("set without meshes: %v", noMeshes)
 	}
 	selected := results[0][0].Report
-	for key, want := range map[string]float64{"meshCount": 1, "boneCount": 2, "skinCount": 1, "trackCount": 18} {
+	for key, want := range map[string]float64{"meshCount": 1, "boneCount": 2, "skinCount": 1, "trackCount": 12} {
 		if selected[key] != want {
 			t.Errorf("selected %s = %v, want %v", key, selected[key], want)
 		}
@@ -678,7 +715,8 @@ from owpreview.c4d_scene import _mesh
 out = []
 for mesh in args[1]:
     obj = _mesh(make_api(), json.loads(mesh))
-    out.append({'polygons': obj.polygons, 'tags': len(obj.tags), 'normals': obj.tags[-1].data[0]})
+    normals = {corner: [value.x, value.y, value.z] for corner, value in obj.tags[-1].data[0].items()}
+    out.append({'polygons': obj.polygons, 'tags': len(obj.tags), 'normals': normals})
 result = out
 `, exporttest.TestsDir(), []string{mustJSON(t, meshes[0]), mustJSON(t, meshes[1])}).MustValue(t)
 	var results []struct {

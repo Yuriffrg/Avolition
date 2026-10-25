@@ -127,6 +127,16 @@ func (a *API) ExportAnimation(path, nickname, outputFolder, options any) (any, e
 		return nil, err
 	}
 	opts, _ := dictOf(options)
+	if opts == nil {
+		opts = ordered.New[any]()
+	}
+	// Capture the user's nickname before a selected object adds its filename prefix.
+	motionName := pypath.Stem(filename)
+	if value, present := opts.Get("motionClipName"); present {
+		if motionName, err = validateMotionClipName(value); err != nil {
+			return nil, err
+		}
+	}
 	var scoped *formats.Asset
 	if selected := get(opts, "selectedModelId"); pycompat.Truthy(selected) {
 		selectedID, ok := selected.(string)
@@ -183,7 +193,7 @@ func (a *API) ExportAnimation(path, nickname, outputFolder, options any) (any, e
 		return nil, newValueError("The destination is the same source file. Choose a different output folder or nickname.")
 	}
 	if settings.Enabled || settings.C4DEnabled {
-		return a.exportFBXAnimation(source, folder, filename, opts, settings, scoped)
+		return a.exportFBXAnimation(source, folder, filename, opts, settings, scoped, motionName)
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -200,7 +210,7 @@ func (a *API) ExportAnimation(path, nickname, outputFolder, options any) (any, e
 
 // exportFBXAnimation is _export_fbx_animation.
 func (a *API) exportFBXAnimation(source, folder, filename string, options *ordered.Map[any], settings exportbundle.Options,
-	scoped *formats.Asset) (any, error) {
+	scoped *formats.Asset, motionName string) (any, error) {
 	entityPath := strOrEmpty(get(options, "entityPath"))
 	if entityPath == "" || !pycompat.IsAbs(entityPath) {
 		return nil, newValueError("Load an entity or model before saving an FBX or C4D copy.")
@@ -276,7 +286,7 @@ func (a *API) exportFBXAnimation(source, folder, filename string, options *order
 		}
 		if destination, ok := destinations["c4d"]; ok {
 			payload, err := c4dexport.MakePayload(asset, clip, materials, c4dexport.PayloadOptions{
-				IncludeMesh: settings.IncludeMesh, RootMotion: settings.RootMotion, ClipName: clipName, RigID: rigID})
+				IncludeMesh: settings.IncludeMesh, RootMotion: settings.RootMotion, ClipName: clipName, RigID: rigID, MotionClipName: motionName})
 			if err != nil {
 				return nil, err
 			}
@@ -360,6 +370,12 @@ func (a *API) ExportAnimationSet(entityPath, assignments, sceneName, outputFolde
 	if err != nil {
 		return nil, err
 	}
+	motionName := pypath.Stem(filename)
+	if value, present := opts.Get("motionClipName"); present {
+		if motionName, err = validateMotionClipName(value); err != nil {
+			return nil, err
+		}
+	}
 	destination := outputFolder
 	if outputFolder == nil {
 		a.mu.Lock()
@@ -412,7 +428,7 @@ func (a *API) ExportAnimationSet(entityPath, assignments, sceneName, outputFolde
 	// Validate all models, clips, timing and hierarchy before contacting
 	// Cinema or creating the output folder. Reuse this sampled payload.
 	payload, err := c4dexport.MakeSetPayload(asset, captured, ordered.New[*ordered.Map[*formats.Material]](),
-		c4dexport.SetOptions{IncludeMesh: settings.IncludeMesh, RootMotion: settings.RootMotion, Name: pypath.Stem(filename)})
+		c4dexport.SetOptions{IncludeMesh: settings.IncludeMesh, RootMotion: settings.RootMotion, Name: pypath.Stem(filename), MotionClipName: motionName})
 	if err != nil {
 		return nil, err
 	}

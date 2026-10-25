@@ -1,4 +1,4 @@
-// Source renderer + real Python backend, parsers and persistent queue catalog.
+// Source renderer + real backend, parsers and persistent queue catalog.
 // Assets are generated fixtures. Only two successful native C4D responses are
 // simulated; the final failed run reaches the real disconnected bridge. This
 // test does not create a Cinema 4D document or contact the user's bridge.
@@ -138,7 +138,9 @@ async function stopBackend() {
     await page.waitForFunction(() => !document.querySelector('#export-animation-set').disabled
       && document.querySelector('#animation-set-export-status').textContent.startsWith('Added to export list'));
     const entries = await getQueue(); assert.equal(entries.length, count);
-    assert.equal(await page.locator('#animation-set-name').inputValue(), 'Gameplay1P_');
+    assert.equal(await page.locator('#animation-set-name').inputValue(), '', 'Adding resets the nickname field without an entity prefix.');
+    assert.equal(saveRequests.at(-1)[0].motionClipName, name, 'The captured API payload retains the exact nickname.');
+    assert.equal(entries.at(-1).motionClipName, name, 'The persisted nickname is independent of the generated export filename.');
     assert.equal(runRequests.length, 0, 'Adding a snapshot does not launch native export.');
     return entries.at(-1);
   };
@@ -161,21 +163,34 @@ async function stopBackend() {
   });
   await page.locator('#entity-select').selectOption(entity); await page.locator('#load-entity').click();
   await page.waitForFunction(() => window.qaViewport?.models.length === 2 && document.querySelector('#viewport-loading').hidden);
+  assert.equal(await page.locator('#animation-set-name').inputValue(), '', 'Loading an entity starts with a blank nickname.');
+  assert.equal(await page.locator('#animation-set-name').getAttribute('placeholder'), 'Animation nickname');
   await choose(armsA, 'model-0');
-  await page.locator('#animation-set-name').fill('single'); await page.locator('#animation-set-name').blur();
+  await page.locator('#export-animation-set').click();
+  assert.match(await page.locator('#animation-set-export-status').innerText(), /Enter a nickname/);
+  assert.equal(saveRequests.length, 0, 'An empty nickname cannot create an export.');
+  await page.locator('#animation-set-name').fill('Reload'); await page.locator('#animation-set-name').blur();
   await pause(800);
   assert.equal(saveRequests.length, 0, 'Name changes and blur do not add or export a setup.');
   assert.deepEqual(await getQueue(), []);
   assert.deepEqual(runRequests, []);
-  const single = await add('single', 1);
-  assert.equal(single.name, 'Gameplay1P_single');
+  const single = await add('Reload', 1);
+  assert.equal(single.name, 'Gameplay1P_Reload');
+  assert.equal(single.motionClipName, 'Reload');
   assert.equal(single.entityPath, entity);
   assert.equal(single.rootPath, assets);
   assert.deepEqual(single.assignments, [{modelId:'model-0',clipPath:armsA}],
     'A single assigned clip still captures the complete entity path, not a selected-object export.');
   assert.equal('selectedModelId' in single, false);
   assert.deepEqual(single.objectNames, {});
+  const literalPrefix = await add('Gameplay1P_Reload', 2);
+  assert.equal(literalPrefix.name, single.name, 'A literal prefix may produce the same output filename.');
+  assert.equal(literalPrefix.motionClipName, 'Gameplay1P_Reload');
+  assert.notEqual(literalPrefix.id, single.id, 'Distinct motion nicknames are not deduplicated solely by filename.');
   await openDialog();
+  await queueRow(literalPrefix.id).locator('.export-queue-remove').click();
+  await page.waitForFunction(() => document.querySelectorAll('.export-queue-row').length === 1);
+  assert.deepEqual(await getQueue(), [single], 'Removing a differently named motion snapshot keeps the original intact.');
   assert.equal(await selection(single.id).isChecked(), false);
   assert.match(await queueRow(single.id).innerText(), /1 assigned animation · whole entity/);
   assert.equal(await page.locator('#export-selected').isDisabled(), true);
@@ -193,12 +208,13 @@ async function stopBackend() {
   await page.locator('#objects-list .object-rename-input').fill('Arms 日本語');
   await page.locator('#objects-list .object-rename-input').press('Enter');
   await until(()=>Boolean(releaseRename),'held object-name save');
-  const addingPair=add('pair 日本語',2);
+  const addingPair=add('ADS_Up_日本語',2);
   await page.waitForFunction(()=>document.querySelector('#export-animation-set').textContent==='Adding…');
-  assert.equal(saveRequests.length,1,'A queue snapshot waits until the pending object name is persisted.');
+  assert.equal(saveRequests.length,2,'A queue snapshot waits until the pending object name is persisted.');
   releaseRename();releaseRename=null;
   const pair = await addingPair;
-  assert.equal(pair.name, 'Gameplay1P_pair 日本語');
+  assert.equal(pair.name, 'Gameplay1P_ADS_Up_日本語');
+  assert.equal(pair.motionClipName, 'ADS_Up_日本語', 'Nickname underscores and Unicode remain literal.');
   assert.deepEqual(pair.assignments, [{modelId:'model-0',clipPath:armsA},{modelId:'model-1',clipPath:gun}]);
   assert.deepEqual(pair.objectNames, {'model:model-0':'Arms 日本語'});
   await armsNode.focus();await page.keyboard.press('F2');
@@ -208,6 +224,7 @@ async function stopBackend() {
   await choose(armsB, 'model-0');
   const changed = await add('Gameplay1P_changed', 3);
   assert.equal(changed.name, 'Gameplay1P_changed', 'An explicit entity prefix is not duplicated.');
+  assert.equal(changed.motionClipName, 'Gameplay1P_changed', 'A deliberately typed prefix is part of the nickname.');
   assert.deepEqual(changed.assignments, [{modelId:'model-1',clipPath:gun},{modelId:'model-0',clipPath:armsB}]);
   assert.deepEqual(changed.objectNames, {'model:model-0':'Later arms'});
   assert.deepEqual((await getQueue())[1],pair,'Later object renaming cannot alter saved export labels.');
@@ -236,6 +253,8 @@ async function stopBackend() {
   await page.goto('about:blank'); await stopBackend(); address = await startBackend();
   await page.goto(address); await ready();
   assert.deepEqual(await getQueue(), [single,pair,changed], 'Every snapshot survives a real application backend restart.');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(profile,'catalog.json'),'utf8')).exportQueue.map(entry => entry.motionClipName),
+    ['Reload','ADS_Up_日本語','Gameplay1P_changed'], 'Exact nicknames survive persisted catalog storage and backend restart.');
   await openDialog();
   assert.deepEqual(await page.locator('.export-queue-check').evaluateAll(checks => checks.map(check => check.checked)), [false,false,false],
     'Restoring a queue does not silently opt saved entries into writing files.');
@@ -293,7 +312,9 @@ async function stopBackend() {
     wholeEntitySnapshots:true,singleAndMultipleAssignments:true,noNameBlurExport:true,
     immutableSnapshots:true,objectNamesCaptured:true,awaitsPendingRename:true,realRestartPersistence:true,initialAndRestoredUnchecked:true,
     selectedOnlySequential:true,maximumActiveRuns,honestDisconnectedBridgeFailure:true,
-    removalPersisted:true,sourceFilesUnchanged:true,oldControlsRemoved:true,searchSortSharedGroup:true});
+    removalPersisted:true,sourceFilesUnchanged:true,oldControlsRemoved:true,searchSortSharedGroup:true,
+    nicknameStartsAndResetsBlank:true,exactMotionClipNames:['Reload','ADS_Up_日本語','Gameplay1P_changed'],
+    motionClipNameIndependentOfFilename:true,distinctNicknamesSharingFilenamePreserved:true});
   console.log(JSON.stringify(report));
 })().catch(error => {
   report.error = String(error.stack || error); report.serverLog = serverLog;

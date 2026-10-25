@@ -177,7 +177,7 @@ def build(payload, path):
     seen['report'] = report
     seen['textures'] = sorted(p.name for p in (path.parent / 'tex').glob('*.png'))
     return {'warnings': ['Fixture only']}
-service = BridgeService(build, lambda: {'octane': True, 'mapInstances': True, 'bridgeVersion': '0.7.5'}, queue)
+service = BridgeService(build, lambda: {'octane': True, 'mapInstances': True, 'mapTiming24': True, 'bridgeVersion': '0.7.7'}, queue)
 deadline = time.monotonic() + 120
 while time.monotonic() < deadline and 'report' not in seen:
     service.tick()
@@ -201,7 +201,7 @@ from owpreview.map_export import export_map
 seen = {}
 class LocalBridge:
     def status(self):
-        return {'connected': True, 'octane': True, 'mapInstances': True, 'bridgeVersion': '0.7.5', 'message': 'Ready'}
+        return {'connected': True, 'octane': True, 'mapInstances': True, 'mapTiming24': True, 'bridgeVersion': '0.7.7', 'message': 'Ready'}
     def export(self, payload, destination, texture_folder, progress=None):
         native = make_api()
         path = Path(destination)

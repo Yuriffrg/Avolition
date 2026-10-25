@@ -2,7 +2,7 @@
 from pathlib import Path
 import re
 
-from .c4d_bridge import BridgeClient, map_bridge_message
+from .c4d_bridge import BridgeClient, map_bridge_message, FEATURE_BRIDGE_MESSAGE
 from .c4d_export import _normalized_normal_asset
 from .c4d_scene import _ordered_graph, _asset_models
 from .export_bundle import export_bundle
@@ -43,8 +43,8 @@ def make_static_payload(asset, materials=None, name=None):
     else:
         prepared = _normalized_normal_asset(asset)
     return dict(version=1, asset=prepared, name=name or asset.get('name', 'Map'),
-                materials=materials or {}, includeMesh=True, mapInstances=True,
-                animation={'fps': 30, 'lastFrame': 0, 'tracks': []},
+                materials=materials or {}, includeMesh=True, mapInstances=True, mapTiming24=True,
+                animation={'fps': 24, 'lastFrame': 0, 'tracks': []},
                 warnings=list(prepared.get('warnings', [])))
 
 
@@ -78,6 +78,8 @@ def export_map(asset, output_folder, scene_name=None, *, bake_textures=True, bri
         raise RuntimeError(status.get('message', 'Cinema 4D with Octane is not connected.'))
     if status.get('mapInstances') is not True:
         raise RuntimeError(map_bridge_message(status))
+    if status.get('mapTiming24') is not True:
+        raise RuntimeError(FEATURE_BRIDGE_MESSAGE)
     if progress:
         progress('Preparing map geometry')
     payload = make_static_payload(asset, name=name)

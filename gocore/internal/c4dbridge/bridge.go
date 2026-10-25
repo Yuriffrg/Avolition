@@ -39,8 +39,9 @@ const (
 	SetupMessage = "C4D export needs Cinema 4D with Octane and the included Avolition C4D Bridge. " +
 		"Copy the Avolition C4D Bridge folder from this download into Cinema 4D's " +
 		"plugins folder, restart Cinema 4D, then export again. Keep Cinema 4D open."
-	MapBridgeMessageText = "Install the bundled Avolition C4D Bridge 0.7.5, replacing the old bridge " +
+	MapBridgeMessageText = "Install the bundled Avolition C4D Bridge 0.7.10, replacing the old bridge " +
 		"copy, then restart Cinema 4D with Octane. Keep only one bridge installed."
+	FeatureBridgeMessage = "This export needs the updated motion clip and map timing support. " + MapBridgeMessageText
 )
 
 // MapBridgeMessage explains that the connected bridge cannot export maps.
@@ -127,6 +128,9 @@ func (s *Status) Octane() bool { return s.truthy("octane") }
 
 // MapInstances reports status.get('mapInstances') is True.
 func (s *Status) MapInstances() bool { return s.isTrue("mapInstances") }
+
+// MapTiming24 reports support for the nonnegative, 24 FPS static-map timeline.
+func (s *Status) MapTiming24() bool { return s.isTrue("mapTiming24") }
 
 // Instance is the plugin instance identifier ("" when disconnected).
 func (s *Status) Instance() string { return s.str("instance") }
@@ -270,6 +274,7 @@ type liveStatus struct {
 	fields    *ordered.Map[json.RawMessage]
 	octane    bool
 	maps      bool
+	features  int
 	heartbeat float64
 }
 
@@ -310,7 +315,15 @@ func (c *Client) Status() *Status {
 		}
 		octane, _ := fields.Get("octane")
 		maps, _ := fields.Get("mapInstances")
-		live = append(live, liveStatus{&fields, truthy(octane), string(maps) == "true", heartbeat})
+		features := 0
+		for _, capability := range []string{"motionClips", "skeletonMotionClips", "combinedMotionClips", "exactFrameTimes", "optimizedGameplay1P", "povHeightZero", "mapTiming24"} {
+			value, _ := fields.Get(capability)
+			if string(value) == "true" {
+				features++
+			}
+		}
+		live = append(live, liveStatus{fields: &fields, octane: truthy(octane), maps: string(maps) == "true",
+			features: features, heartbeat: heartbeat})
 	}
 	if len(live) == 0 {
 		status := &Status{}
@@ -318,8 +331,8 @@ func (c *Client) Status() *Status {
 		status.Set("message", SetupMessage)
 		return status
 	}
-	// Prefer a map-capable Octane instance over a newer heartbeat from an
-	// older open Cinema version. Both preflight and job dispatch use this rule.
+	// Prefer a capable Octane instance over a newer heartbeat from an older
+	// bridge. Both preflight and job dispatch use this rule.
 	best := live[0]
 	for _, candidate := range live[1:] {
 		if better(candidate, best) {
@@ -343,13 +356,16 @@ func (c *Client) Status() *Status {
 }
 
 // better orders by Python's max key (bool(octane), mapInstances is True,
-// heartbeat); max keeps the first of equal keys.
+// supported feature count, heartbeat); max keeps the first of equal keys.
 func better(a, b liveStatus) bool {
 	if a.octane != b.octane {
 		return a.octane
 	}
 	if a.maps != b.maps {
 		return a.maps
+	}
+	if a.features != b.features {
+		return a.features > b.features
 	}
 	return a.heartbeat > b.heartbeat
 }
@@ -389,6 +405,29 @@ func payloadMapInstances(payload any, options ExportOptions) bool {
 		return truthy(item)
 	}
 	return false
+}
+
+func requiredCapabilities(payload any) []string {
+	if p, ok := payload.(interface{ RequiredBridgeCapabilities() []string }); ok {
+		return p.RequiredBridgeCapabilities()
+	}
+	var flags []string
+	for _, pair := range [][2]string{{"motionClip", "combinedMotionClips"}, {"motionClip", "exactFrameTimes"}, {"gameplay1P", "optimizedGameplay1P"}, {"gameplay1P", "povHeightZero"}, {"mapTiming24", "mapTiming24"}} {
+		var raw []byte
+		switch p := payload.(type) {
+		case map[string]any:
+			raw, _ = Marshal(p[pair[0]])
+		case *ordered.Map[any]:
+			v, _ := p.Get(pair[0])
+			raw, _ = Marshal(v)
+		case *ordered.Map[json.RawMessage]:
+			raw, _ = p.Get(pair[0])
+		}
+		if truthy(raw) {
+			flags = append(flags, pair[1])
+		}
+	}
+	return flags
 }
 
 func newJobName() (string, error) {
@@ -435,6 +474,11 @@ func (c *Client) Export(payload any, destination, textureFolder string, options 
 	}
 	if mapInstances && !status.MapInstances() {
 		return nil, runtimeError(MapBridgeMessage(status))
+	}
+	for _, capability := range requiredCapabilities(payload) {
+		if !status.isTrue(capability) {
+			return nil, runtimeError(FeatureBridgeMessage)
+		}
 	}
 	name, err := newJobName()
 	if err != nil {

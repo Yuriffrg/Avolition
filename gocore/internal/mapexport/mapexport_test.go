@@ -45,8 +45,9 @@ func (b *mockBridge) Status() *c4dbridge.Status {
 	set("connected", b.connected)
 	set("octane", true)
 	set("mapInstances", b.capability)
+	set("mapTiming24", b.capability)
 	if b.capability {
-		set("bridgeVersion", "0.7.4")
+		set("bridgeVersion", "0.7.7")
 	} else {
 		set("bridgeVersion", "0.7.2")
 	}
@@ -117,7 +118,7 @@ func TestStaticPayloadIsCompactHasNoAnimationAndPreservesSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	decoded := payloadJSON(t, payload)
-	if got := string(encode(t, decoded["animation"])); got != `{"fps":30,"lastFrame":0,"tracks":[]}` {
+	if got := string(encode(t, decoded["animation"])); got != `{"fps":24,"lastFrame":0,"tracks":[]}` {
 		t.Fatal(got)
 	}
 	if decoded["mapInstances"] != true || decoded["name"] != "Map name" {
@@ -243,7 +244,7 @@ func TestOldBridgeAndDisconnectionFailBeforeOutputCreation(t *testing.T) {
 	for _, c := range []struct {
 		bridge  *mockBridge
 		pattern string
-	}{{old, `bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.5`}, {disconnected, "disconnected"}} {
+	}{{old, `bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.10`}, {disconnected, "disconnected"}} {
 		output := filepath.Join(root, "never-created")
 		name := "Map"
 		opts := DefaultOptions()

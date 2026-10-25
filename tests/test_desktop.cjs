@@ -77,7 +77,7 @@ async function launch() {
   assert.equal(native.nodeIntegration, false);
   assert.equal(await page.title(), 'Avolition');
   assert.equal(await page.locator('#app-logo, .avolition-empty-logo, .empty-note').count(), 0);
-  assert.equal(await page.locator('.local-badge .version').innerText(), 'v0.8.24');
+  assert.equal(await page.locator('.local-badge .version').innerText(), 'v0.8.29');
   assert.equal(await page.locator('#clip-notes').count(), 0);
   assert.equal(await page.locator('#export-fbx, #fbx-up-axis').count(), 0);
   assert.equal(await page.locator('#clip-name, #export-clip, #export-c4d, #track-groups, #track-count-filter').count(), 0);
@@ -309,10 +309,11 @@ async function closeNative() {
   await page.locator('#export-animation-set').dispatchEvent('click');
   await page.waitForFunction(() => document.querySelector('#animation-set-export-status').textContent.startsWith('Added to'));
   assert.equal(await page.locator('.clip-name').first().innerText(), nickname);
-  assert.equal(await page.locator('#animation-set-name').inputValue(), 'PreviewRobot_');
+  assert.equal(await page.locator('#animation-set-name').inputValue(), '', 'Adding clears the nickname without adding an entity prefix.');
   const queued = await page.evaluate(async () => (await window.pywebview.api.bootstrap()).data.exportQueue);
   assert.equal(queued.length, 1);
   assert.equal(queued[0].name, queueName);
+  assert.equal(queued[0].motionClipName, nickname, 'The native queue retains the exact motion nickname independently of the filename.');
   assert.equal(queued[0].entityPath, entity);
   assert.equal(queued[0].rootPath, assets);
   assert.deepEqual(queued[0].assignments, [{modelId:targetModel, clipPath:source}]);

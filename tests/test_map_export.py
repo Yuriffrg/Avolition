@@ -22,8 +22,8 @@ class MockBridge:
         self.calls = []
 
     def status(self):
-        return dict(connected=self.connected, octane=True, mapInstances=self.capability,
-                    bridgeVersion='0.7.4' if self.capability else '0.7.2',
+        return dict(connected=self.connected, octane=True, mapInstances=self.capability, mapTiming24=self.capability,
+                    bridgeVersion='0.7.7' if self.capability else '0.7.2',
                     message='Cinema 4D is disconnected.' if not self.connected else 'Ready')
 
     def export(self, payload, destination, texture_folder):
@@ -46,7 +46,7 @@ class MapExportTests(unittest.TestCase):
     def test_static_payload_is_compact_has_no_animation_and_preserves_source(self):
         before = copy.deepcopy(self.asset)
         payload = make_static_payload(self.asset, name='Map name')
-        self.assertEqual(payload['animation'], {'fps': 30, 'lastFrame': 0, 'tracks': []})
+        self.assertEqual(payload['animation'], {'fps': 24, 'lastFrame': 0, 'tracks': []})
         self.assertTrue(payload['mapInstances'])
         self.assertEqual(len(payload['asset']['meshPrototypes']), 3)
         self.assertTrue(all('meshes' not in model for model in payload['asset']['models']))
@@ -139,7 +139,7 @@ class MapExportTests(unittest.TestCase):
         self.assertEqual(bridge.calls[0]['animation']['tracks'], [])
 
     def test_old_bridge_and_disconnection_fail_before_output_creation(self):
-        for bridge, message in ((MockBridge(capability=False), r'bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.5'),
+        for bridge, message in ((MockBridge(capability=False), r'bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.10'),
                                 (MockBridge(connected=False), 'disconnected')):
             output = self.root / 'never-created'
             with patch('owpreview.map_export.bake_materials') as bake:

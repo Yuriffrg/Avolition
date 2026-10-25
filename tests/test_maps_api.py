@@ -13,7 +13,7 @@ from test_map_formats import write_fixture
 
 class MapBridge(MockBridgeClient):
     def status(self):
-        return dict(super().status(), mapInstances=True)
+        return dict(super().status(), mapInstances=True, mapTiming24=True)
 
     def export(self, *args, progress=None, **kwargs):
         return super().export(*args, **kwargs)

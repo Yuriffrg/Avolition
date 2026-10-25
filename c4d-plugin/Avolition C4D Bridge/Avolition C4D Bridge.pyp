@@ -9,7 +9,7 @@ from whitehound_c4d.c4d_scene import build_scene
 
 # Private prototype IDs, separate from the user's Overwatch Entities/Maps IDs.
 PLUGIN_ID = 1066202606
-BRIDGE_VERSION = '0.7.5'
+BRIDGE_VERSION = '0.7.10'
 BRIDGE_NAME = 'Avolition C4D Bridge'
 
 
@@ -17,6 +17,8 @@ def capabilities():
     return {'bridgeVersion': BRIDGE_VERSION, 'bridgeName': BRIDGE_NAME,
             'pluginPath': os.path.dirname(os.path.abspath(__file__)),
             'cinemaVersion': c4d.GetC4DVersion(), 'mapInstances': True,
+            'motionClips': True, 'skeletonMotionClips': True, 'combinedMotionClips': True, 'mapTiming24': True,
+            'exactFrameTimes': True, 'optimizedGameplay1P': True, 'povHeightZero': True,
             'octane': c4d.plugins.FindPlugin(1029501, c4d.PLUGINTYPE_MATERIAL) is not None}
 
 

@@ -18,6 +18,48 @@ const modelKey = value => String(value || '').replace(/\.(?:owmdl|00c)$/i, '').t
 const basename = value => cleanPath(value).split('/').at(-1) || '';
 const compareText = (a, b) => String(a || '').localeCompare(String(b || ''), 'en');
 
+function clipTiming(clip) {
+  if (!clip || clip.error) return null;
+  const fps = Number(clip.fps);
+  let seconds = clip.durationSeconds;
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) {
+    const frame = clip.lastFrame ?? (Number.isInteger(clip.durationFrames) ? clip.durationFrames - 1 : null);
+    if (!Number.isFinite(frame) || frame < 0 || !Number.isFinite(fps) || fps <= 0) return null;
+    seconds = frame / fps;
+  }
+  return {seconds, fps:Number.isFinite(fps) && fps > 0 ? fps : null};
+}
+
+// Attached objects usually accompany their parent's clip (arms and weapon).
+// Otherwise use the last assigned other object, never the selected object's own
+// assignment. Counts and filenames do not identify a weapon or an action.
+export function assignmentDurationReference(assignments = new Map(), selectedModelId = '', models = []) {
+  const usable = new Map();
+  for (const [modelId, clip] of assignments) {
+    const timing = clipTiming(clip);
+    if (modelId !== selectedModelId && timing?.seconds > 0) usable.set(modelId, {modelId, clip, ...timing});
+  }
+  const byId = new Map(models.map(model => [model.id, model]));
+  const visited = new Set([selectedModelId]);
+  let parent = byId.get(selectedModelId)?.parentId;
+  while (parent && !visited.has(parent)) {
+    if (usable.has(parent)) return usable.get(parent);
+    visited.add(parent);
+    parent = byId.get(parent)?.parentId;
+  }
+  return [...usable.values()].at(-1) || null;
+}
+
+export function matchesDuration(clip, reference) {
+  const timing = clipTiming(clip);
+  if (!timing || !reference || !Number.isFinite(reference.seconds) || reference.seconds <= 0) return false;
+  // A frame of tolerance accommodates clips sampled at different rates. Missing
+  // frame rates require an exact duration instead of inventing a default FPS.
+  const frameSeconds = [timing.fps, reference.fps].filter(fps => Number.isFinite(fps) && fps > 0).map(fps => 1 / fps);
+  const tolerance = frameSeconds.length === 2 ? Math.max(...frameSeconds) : 0;
+  return Math.abs(timing.seconds - reference.seconds) <= tolerance + 1e-9;
+}
+
 function modelPathParts(value) {
   const path = cleanPath(value), parts = path.split('/');
   if (!path.startsWith('/') && !/^[a-z]:\//i.test(path)) return null;
@@ -74,7 +116,7 @@ function relatedOccurrences(clip, occurrences) {
 const validBinding = binding => binding && !binding.error && Array.isArray(binding.boneNames)
   && binding.boneNames.every(name => typeof name === 'string' && name.length > 0);
 
-export function matchClip(clip, context, allOccurrences = []) {
+export function matchClip(clip, context, allOccurrences = [], durationReference = null) {
   const related = relatedOccurrences(clip, allOccurrences);
   const sameModelFolder = Boolean(context?.modelFolder && related.some(row => {
     const source = modelPathParts(row.path);
@@ -86,6 +128,7 @@ export function matchClip(clip, context, allOccurrences = []) {
   const score = {name:String(clip?.name || basename(clip?.path)), path:String(clip?.path || ''),
     known:false, matched:null, totalBoneCount:context?.totalBoneCount || 0, trackCount,
     extraTracks:null, coverage:null, sameModelFolder, sourceRank:Number(sameModelFolder),
+    durationMatch:matchesDuration(clip, durationReference),
     error:clip?.error || clip?.binding?.error || null};
   if (!context?.boneNames?.size || !binding) return score;
   const names = new Set(binding.boneNames);
@@ -100,6 +143,7 @@ export function compareMatchScores(a, b) {
   return Number(Boolean(b?.known)) - Number(Boolean(a?.known))
     || Number(b?.sourceRank || 0) - Number(a?.sourceRank || 0)
     || (a?.known && b?.known ? b.matched - a.matched || a.extraTracks - b.extraTracks : 0)
+    || Number(Boolean(b?.durationMatch)) - Number(Boolean(a?.durationMatch))
     || compareText(a?.name, b?.name) || compareText(a?.path, b?.path);
 }
 
