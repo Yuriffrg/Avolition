@@ -1,3 +1,4 @@
+const {openAnimationSetup} = require('./open-animation-setup.cjs');
 // Packaged Electron, preload IPC, compiled Python backend and real binary
 // fixtures. An isolated empty bridge queue makes Cinema deterministically
 // unavailable. No native export response or backend API is mocked.
@@ -79,6 +80,7 @@ const report = {passed:false, executable, scratch, hidden:true, qaOnlyNoSandbox:
   await page.locator('#root-path').fill(assets);await page.locator('#scan-root').dispatchEvent('click');
   await page.waitForFunction(()=>document.querySelector('#clip-count').textContent==='2');
   await page.locator('#fbx-options-button').dispatchEvent('click');
+  await page.locator('#export-files-tab').click();
   await page.locator('#output-path').fill(output);await page.locator('#output-path').press('Enter');
   await page.waitForFunction(()=>document.querySelector('#output-help').hidden);
   await page.locator('#close-export-menu').dispatchEvent('click');
@@ -90,13 +92,16 @@ const report = {passed:false, executable, scratch, hidden:true, qaOnlyNoSandbox:
   await page.waitForFunction(()=>window.qaViewport?.models.length===2 && document.querySelector('#viewport-loading').hidden);
   await page.locator('.clip-row').filter({hasText:'Arms'}).dispatchEvent('click');
   await page.waitForFunction(()=>window.qaViewport.assignments.length===1 && document.querySelector('#viewport-loading').hidden);
+  await page.locator('#clip-details > summary').click();
   assert.match(await page.locator('#match-message').innerText(),/1 \/ 2 tracks matched/,'Partial matching remains accepted in the native renderer.');
+  await openAnimationSetup(page);
   await page.locator('#rig-select').selectOption('model-1');
   await page.locator('.clip-row').filter({hasText:'Weapon'}).dispatchEvent('click');
   await page.waitForFunction(()=>window.qaViewport.assignments.length===2 && document.querySelector('#viewport-loading').hidden);
   if(await page.locator('#play-pause').getAttribute('aria-label')==='Pause')await page.locator('#play-pause').dispatchEvent('click');
   assert.equal(await page.locator('#animation-set .animation-set-row').count(),2);
   for(const modelId of ['model-0','model-1']){
+    await openAnimationSetup(page);
     await page.locator('#rig-select').selectOption(modelId);
     assert.equal(await page.locator('#timeline').getAttribute('max'),'60');
     assert.equal(await page.locator('#total-time').innerText(),'1.00 s');
@@ -128,6 +133,7 @@ const report = {passed:false, executable, scratch, hidden:true, qaOnlyNoSandbox:
   assert.match(ipc.result.error,/Avolition C4D Bridge/,'Real valid combined IPC reaches the native bridge availability check.');
   assert.doesNotMatch(ipc.result.error,/unknown.*method|not allowed|unsupported.*method/i);
   assert.equal(ipc.invalid.ok,false);assert.match(ipc.invalid.error,/unique animation assignment/);
+  await openAnimationSetup(page);
   await page.locator('#animation-set-name').fill('Native UI combined 日本語');
   await page.locator('#export-animation-set').dispatchEvent('click');
   await page.waitForFunction(()=>document.querySelector('#animation-set-export-status').textContent.startsWith('Added to')

@@ -237,6 +237,66 @@ func TestUnrepresentableShearIsExplicitNotSilentlyLost(t *testing.T) {
 	expectError(t, err, "nonuniform scale")
 }
 
+func TestActorScaleBakePreservesWorldPivotsAndRotations(t *testing.T) {
+	fixture := exporttest.LoadPlayback(t)
+	model := &formats.Model{ID: "rig", Name: "Rig", Bones: fixture.Bones}
+	asset := &formats.Asset{Models: []*formats.Model{model}}
+	graph, err := formats.BuildExportHierarchy(asset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset.ExportHierarchy = graph
+	clip := exporttest.Clip("Idle", 30, 20, fixture.Tracks)
+	assignments := []c4dexport.Assignment{{ModelID: model.ID, Clip: clip}}
+	opts := c4dexport.SetOptions{Name: "Idle", RootMotion: true}
+	_, err = c4dexport.MakeSetPayload(asset, assignments, nil, opts)
+	expectError(t, err, "nonuniform scale")
+
+	opts.BakeScaleToJointPositions = true
+	payload, err := c4dexport.MakeSetPayload(asset, assignments, nil, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Warnings) != 1 || !strings.Contains(payload.Warnings[0], "Direct scale deformation is omitted") {
+		t.Fatalf("Missing scale warning: %v", payload.Warnings)
+	}
+	evaluator, err := exportpose.NewEvaluator(model.Bones, clip.Bones)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial := evaluator.Evaluate(0, false)
+	for frame := int64(0); frame <= clip.LastFrame; frame++ {
+		pose := evaluator.Evaluate(float64(frame), false)
+		world := make([]exportpose.Mat4, len(model.Bones))
+		for _, i := range evaluator.Order {
+			local := frameMatrix(payload.Animation.Tracks[i].Frames[frame])
+			if _, _, _, err := exportpose.Decompose(&local); err != nil {
+				t.Fatalf("Non-PSR local on joint %d at frame %d: %v", i, frame, err)
+			}
+			world[i] = local
+			if parent := evaluator.Parents[i]; parent >= 0 {
+				world[i] = world[parent].Mul(&local)
+			}
+			for row := 0; row < 3; row++ {
+				for col := 0; col < 4; col++ {
+					want := pose.World[i][row][col]
+					if col < 3 {
+						want = want / pose.Scales[i][col] * initial.Scales[i][col]
+					}
+					if math.Abs(world[i][row][col]-want) > 1e-10 {
+						t.Fatalf("Joint %d frame %d [%d,%d]: got %.12f, want %.12f", i, frame, row, col, world[i][row][col], want)
+					}
+				}
+			}
+		}
+	}
+	// A nonuniform, rotated parent already present at frame zero still
+	// cannot be represented without changing the original hierarchy.
+	copy(clip.Bones[0].Scales.Values[:3], []float64{2, 0.5, 3})
+	_, err = c4dexport.MakeSetPayload(asset, assignments, nil, opts)
+	expectError(t, err, "nonuniform scale")
+}
+
 // --- tests/test_export_normals.py ------------------------------------------
 
 func meshFixture(positions [][3]float64, indices []uint32, normals [][3]float64) *formats.Mesh {

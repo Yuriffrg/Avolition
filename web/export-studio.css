@@ -1,0 +1,141 @@
+/* Shared dialog shell for the export destinations and the rig review. */
+.export-studio[open] {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100vw - 28px));
+  max-height: calc(100vh - 28px);
+  padding: 0;
+  overflow: hidden;
+}
+.export-studio .export-menu-heading {
+  flex: none;
+  min-height: 49px;
+  margin: 0;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.export-studio .export-menu-heading h2 {
+  font-size: 17px;
+  font-weight: 500;
+}
+.export-tabs {
+  display: flex;
+  flex: none;
+  padding: 0 8px;
+  background: var(--rail);
+  border-bottom: 1px solid var(--line);
+}
+.export-tabs > button {
+  min-width: 116px;
+  padding: 11px 18px;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.export-tabs > button[aria-selected=true] {
+  border-bottom-color: var(--accent);
+  background: var(--panel);
+  color: var(--ink);
+}
+.export-tabs > button:focus-visible {
+  outline-offset: -3px;
+}
+.export-studio-body {
+  min-height: 0;
+  padding: 16px 18px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.export-mode-help {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.export-studio .export-queue-heading {
+  margin: 15px 0 7px;
+}
+.export-studio .export-queue-heading h3 {
+  font-size: 13px;
+}
+.export-studio .export-queue-row {
+  min-height: 37px;
+  padding: 5px 8px;
+  gap: 8px;
+}
+.export-studio .export-queue-info {
+  display: grid;
+  grid-template-columns: minmax(108px, 1fr) minmax(120px, 1.25fr);
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  letter-spacing: normal;
+}
+.export-studio .export-queue-name, .export-studio .export-queue-assignment {
+  overflow-wrap: anywhere;
+}
+.export-studio .export-destination {
+  margin-top: 15px;
+}
+.export-studio .export-menu-settings {
+  margin-top: 10px;
+  padding-bottom: 0;
+  border: 0;
+}
+.export-studio summary {
+  width: fit-content;
+  padding: 3px 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+.export-connection {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.export-connection h3 {
+  grid-area: 1 / 1;
+  font-size: 12px;
+  font-weight: 500;
+}
+.export-connection .button {
+  grid-area: 1 / 2 / span 2;
+  min-height: 28px;
+  height: auto;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+.export-connection p {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+.export-connection p.success { color: var(--green); }
+.export-connection p.error { color: var(--bad); }
+.export-studio .export-menu-actions {
+  flex: none;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 10px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--rail);
+}
+.export-studio #open-export-output { margin-right: auto; }
+.export-studio .export-menu-actions .primary:not(:disabled) {
+  color: #171820;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.export-studio .export-menu-actions .primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent), white 15%);
+}
+#stager-rig-dialog.export-studio { overflow: hidden; }
+.export-studio .stager-review { margin: 0; }
+@media (max-width: 550px) {
+  .export-studio .export-queue-info { grid-template-columns: 1fr; gap: 2px; }
+  .export-studio .stager-source { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -570,13 +570,28 @@ class _ClipBindingReader(_Reader):
         self.offset += size
 
 
-def read_clip_binding_metadata(path) -> dict[str, Any]:
-    """Read exact bone-record names without decoding or allocating keyframes.
+def _first_clip_key(reader, count, components, rotation):
+    layout = struct.Struct('<I' + 'f' * components)
+    first = None
+    while count:
+        batch = min(count, 1024)
+        for key in layout.iter_unpack(reader.take(batch * layout.size)):
+            if first is None or key[0] <= first[0]:
+                first = key
+        count -= batch
+    frame, *value = first
+    reader.count(frame, 100_000_000, 'keyframe frame number')
+    if not all(map(math.isfinite, value)):
+        reader.fail('non-finite numeric value')
+    return {'frames': [frame], 'values': _normalize_quaternion(value) if rotation else value}
+
+
+def read_clip_binding_metadata(path, pose_bones=None) -> dict[str, Any]:
+    """Read exact bone names, optionally sampling frame zero on requested ancestors.
 
     Matching follows ``load_clip``: every named bone record counts, including
-    records with no populated channels. Structural corruption is rejected;
-    frame numbers and numeric key values are deliberately not decoded here.
-    Playback's full parser still validates those values when a clip is loaded.
+    records with no populated channels. Skip all unrelated key arrays. The
+    full parser validates every numeric sample when the clip is loaded.
     """
     path = _path(path, '.owanimclip')
     with path.open('rb') as source:
@@ -586,6 +601,7 @@ def read_clip_binding_metadata(path) -> dict[str, Any]:
         reader = _ClipBindingReader(path, source, size)
         header = _clip_header(reader, size)
         names, seen, warnings = [], set(), []
+        pose = []
         components_by_kind = {0: 3, 1: 4, 2: 3}
         track_names = {0: 'positions', 1: 'rotations', 2: 'scales'}
         for _ in range(header['boneCount']):
@@ -596,6 +612,7 @@ def read_clip_binding_metadata(path) -> dict[str, Any]:
             names.append(name)
             reader.count(track_count, 16, 'track count')
             known_tracks = set()
+            bone = {'name': name}
             for _ in range(track_count):
                 kind, key_count, components = reader.unpack('III')
                 reader.count(key_count, 10_000_000, 'keyframe count')
@@ -608,12 +625,20 @@ def read_clip_binding_metadata(path) -> dict[str, Any]:
                     known_tracks.add(kind)
                 else:
                     warnings.append(f'{name}: skipped unknown track type {kind}.')
-                reader.skip(key_count * (4 + components * 4))
+                if pose_bones and name in pose_bones and kind in track_names and key_count:
+                    bone[track_names[kind]] = _first_clip_key(reader, key_count, components, kind == 1)
+                else:
+                    reader.skip(key_count * (4 + components * 4))
+            if len(bone) > 1:
+                pose.append(bone)
         if os.fstat(source.fileno()).st_size != size:
             reader.fail('file changed while reading animation metadata; scan again')
         if reader.remaining:
             warnings.append(f'Ignored {reader.remaining:,} trailing bytes from clip version {header["version"]}.')
-    return {'path': str(path), 'boneNames': names, 'boneCount': header['boneCount'], 'warnings': warnings}
+    result = {'path': str(path), 'boneNames': names, 'boneCount': header['boneCount'], 'warnings': warnings}
+    if pose_bones:
+        result['firstPose'] = pose
+    return result
 
 
 def load_clip(path) -> dict[str, Any]:

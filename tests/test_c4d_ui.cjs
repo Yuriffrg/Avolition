@@ -104,8 +104,9 @@ const exportCount = async (count) => {
   await page.waitForFunction(()=>document.querySelector('#viewport-empty').hidden&&document.querySelector('#viewport-loading').hidden);
   await page.locator('.clip-row').filter({hasText:'001_Wave'}).click();
   await page.waitForFunction(()=>!document.querySelector('#timeline').disabled);
+  await page.locator('#viewport-settings > summary').click();
   await page.locator('#lock-root').check();
-  await page.locator('#objects-button').click();
+  await page.locator('#objects-menu > summary').click();
   await page.locator('#objects-hide-all').click();
   assert.match(await page.locator('#objects-summary').innerText(), /^0 of 8 meshes shown$/);
   await page.getByRole('button', {name:'Close objects',exact:true}).click();

@@ -1,3 +1,4 @@
+const {openAnimationSetup} = require('./open-animation-setup.cjs');
 // Real renderer + source backend. Fixture files, indexing, parsing, annotation
 // saves and named export-list snapshots exercise production code. No export is
 // requested; unexpected export calls fail the test. All data is isolated.
@@ -84,6 +85,7 @@ async function until(check, description, milliseconds=20000) {
   await page.waitForFunction(() => !document.querySelector('#scan-root').disabled && /^(Ready\.|Library restored)/.test(document.querySelector('#status-text').textContent));
   assert.equal(await page.title(),'Avolition');
   assert.equal(await page.locator('.inspector-panel #objects-menu').isVisible(),true);
+  await page.locator('#objects-menu > summary').click();
   assert.equal(await page.locator('#objects-button, #objects-menu[popover]').count(),0);
   assert.equal(await page.locator('#hide-duplicates').isChecked(), true);
   assert.equal(await page.locator('#pairing-panel').count(), 0, 'The fork contains no automatic pairing UI.');
@@ -94,6 +96,7 @@ async function until(check, description, milliseconds=20000) {
   assert.equal(await page.locator('.clip-row').count(), 4);
   assert.equal(await page.locator('.clip-name').filter({hasText:/^001_Wave$/}).count(), 2, 'Same filename with different bytes must remain visible.');
   assert.match(await page.locator('#library-summary').innerText(), /1 duplicates hidden/);
+  await page.locator('#library-filters > summary').click();
   await page.locator('#hide-duplicates').uncheck();
   assert.equal(await page.locator('.clip-row').count(), 5);
   await page.locator('#hide-duplicates').check();
@@ -141,13 +144,17 @@ async function until(check, description, milliseconds=20000) {
   await page.locator('#timeline').fill('30');
   const jointState = await page.evaluate(() => window.qaViewport.models.map(model => model.bones.map(bone => bone.matrix.toArray())));
   assert.notDeepEqual(jointState[0], jointState[1], 'Shared bone names have different assigned poses.');
+  await openAnimationSetup(page);
   await page.locator('#rig-select').selectOption('model-0');
   assert.equal(await page.locator('#playing-title').innerText(), '001_Wave');
+  await openAnimationSetup(page);
   await page.locator('#rig-select').selectOption('model-1');
   assert.equal(await page.locator('#playing-title').innerText(), '002_Turn');
+  await openAnimationSetup(page);
   await page.locator('#clear-object-animation').click();
   assert.deepEqual(await assignments(), [{modelId:'model-0',name:'001_Wave'}]);
   assert.equal(await page.locator('#timeline').isDisabled(), false, 'Clearing one object keeps the remaining animation playable.');
+  await openAnimationSetup(page);
   await page.locator('#rig-select').selectOption('model-0');
   assert.equal(await page.locator('#playing-title').innerText(), '001_Wave');
   report.manualBindings = {separateSharedJointPoses:true, restoringTargets:true, clearPreservesOther:true, visibilityIndependent:true};
@@ -156,6 +163,7 @@ async function until(check, description, milliseconds=20000) {
   holdClipPath = source('003_Root');
   await page.evaluate(() => [...document.querySelectorAll('.clip-row')].find(row => row.textContent.includes('003_Root')).click());
   await until(() => Boolean(releaseClip), 'delayed animation request');
+  await openAnimationSetup(page);
   await page.locator('#rig-select').selectOption('model-1');
   const clipResponse = page.waitForResponse(response => response.url().endsWith('/api/load_animation'));
   releaseClip(); releaseClip = null;
@@ -169,6 +177,7 @@ async function until(check, description, milliseconds=20000) {
   // Adding a setup captures assignments without invoking Cinema or writing an
   // export. A single assignment still represents the whole loaded entity.
   await chooseClip('Animations/001_Wave.owanimclip');
+  await openAnimationSetup(page);
   await page.locator('#animation-set-name').fill('gun_only');
   await page.locator('#export-animation-set').click();
   await page.waitForFunction(() => document.querySelector('#animation-set-export-status').textContent.startsWith('Added to export list:') && !document.querySelector('#export-animation-set').disabled);
@@ -181,8 +190,10 @@ async function until(check, description, milliseconds=20000) {
 
   // The same source may animate both objects; adding again stores an independent
   // complete setup and leaves the first snapshot unchanged.
+  await openAnimationSetup(page);
   await page.locator('#rig-select').selectOption('model-0');
   await chooseClip('Animations/001_Wave.owanimclip');
+  await openAnimationSetup(page);
   await page.locator('#animation-set-name').fill('reload');
   await page.locator('#animation-set-name').press('Enter');
   await page.waitForFunction(() => document.querySelector('#animation-set-export-status').textContent.includes('Added to export list: Gameplay1P_reload.c4d') && !document.querySelector('#export-animation-set').disabled);
@@ -196,9 +207,10 @@ async function until(check, description, milliseconds=20000) {
   assert.equal(await page.locator('.export-queue-row').count(), 2);
   assert.equal(await page.locator('.export-queue-check:checked').count(), 0, 'New entries require explicit export selection.');
   assert.equal(await page.locator('#export-selected').isDisabled(), true);
-  assert.match(await page.locator('.export-queue-assignment').first().innerText(), /1 assigned animation.*whole entity/);
-  assert.match(await page.locator('.export-queue-assignment').last().innerText(), /2 assigned animations.*whole entity/);
+  assert.match(await page.locator('.export-queue-assignment').first().innerText(), /1 assigned animation/);
+  assert.match(await page.locator('.export-queue-assignment').last().innerText(), /2 assigned animations/);
   await page.locator('#close-export-menu').click();
+  await openAnimationSetup(page);
   await page.locator('#rig-select').selectOption('model-1');
   assert.equal(sceneRequests.length, 0, 'Naming, adding and selecting objects never invoke an export.');
   report.namedQueue = {oneObjectSnapshot:true, twoObjectSnapshot:true, wholeEntity:true, unchecked:true, noImplicitExport:true};
@@ -207,6 +219,7 @@ async function until(check, description, milliseconds=20000) {
   // the selected rig, assignments, nickname, filtering and playback in place.
   if (await page.locator('#play-pause').getAttribute('aria-label') === 'Pause') await page.locator('#play-pause').click();
   await page.locator('#timeline').fill('17');
+  await openAnimationSetup(page);
   await page.locator('#animation-set-name').fill('Gameplay1P_next_draft');
   await page.locator('#clip-search').fill('reload');
   await page.locator('#clip-sort').selectOption('nicknamed-first');

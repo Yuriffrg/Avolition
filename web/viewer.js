@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.js';
 import { PreviewOrbitControls } from './navigation.js';
+import { PivotNavigation } from './pivot-navigation.js';
 import { createPoseEvaluator } from './pose.js';
 import { MaterialLibrary } from './materials.js';
 import { MapBatches } from './map-batching.js';
@@ -9,6 +10,8 @@ import { MapBatches } from './map-batching.js';
 const attribute = (values, size, TypedArray) =>
   new THREE.BufferAttribute(values instanceof TypedArray ? values : new TypedArray(values), size);
 const isTyping = target => target?.matches?.('input, textarea, select, [contenteditable="true"]');
+const navigationKeys = new Map([['Digit1','1'],['Digit2','2'],['Digit3','3'],
+  ['Numpad1','1'],['Numpad2','2'],['Numpad3','3']]);
 export const DEFAULT_VIEW_OPTIONS = Object.freeze({grid: true, skeleton: false, wireframe: false, lockRoot: false, textured: true, pov: false});
 const POV_FOV = 70;
 // OW's camera looks along local +Z; Three's camera looks along local -Z.
@@ -63,7 +66,7 @@ export class PreviewViewport {
     this.frame = 0;
     this._renderDirty = true;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color('#111115');
+    this.scene.background = new THREE.Color('#15131a');
     this.camera = new THREE.PerspectiveCamera(38, 1, 0.01, 10000);
     this.camera.position.set(3.5, 2.5, 4.5);
     this.renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: false, powerPreference: 'high-performance'});
@@ -78,7 +81,7 @@ export class PreviewViewport {
     const rim = new THREE.DirectionalLight(0xd1d0d7, 2.3);
     rim.position.set(-4, 3, -5);
     this.scene.add(key, rim);
-    this.grid = new THREE.GridHelper(10, 20, 0x45434b, 0x28272e);
+    this.grid = new THREE.GridHelper(10, 20, 0x62566d, 0x332c3b);
     this.scene.add(this.grid);
     this.assetRoot = new THREE.Group();
     this.scene.add(this.assetRoot);
@@ -91,7 +94,9 @@ export class PreviewViewport {
     this.controls.mouseButtons.RIGHT = THREE.MOUSE.DOLLY;
     this._controlsChange = () => this.invalidate();
     this.controls.addEventListener('change', this._controlsChange);
+    this.pivotNavigation = new PivotNavigation(this);
     this._navigationKey = null;
+    this._navigationKeys = new Set();
     this._keydown = event => this._handleKeyDown(event);
     this._keyup = event => this._handleKeyUp(event);
     this._blur = () => this._handleKeyUp();
@@ -125,25 +130,31 @@ export class PreviewViewport {
 
   _handleKeyDown(event) {
     if (!this._canUseCanvas() || this.controls.enabled === false) { this._handleKeyUp(); return; }
-    if (isTyping(event.target) || event.target?.isContentEditable) return;
-    if (['1', '2', '3'].includes(event.key)) {
-      this._navigationKey = event.key;
-      this.controls.mouseButtons.LEFT = {'1': THREE.MOUSE.PAN, '2': THREE.MOUSE.DOLLY, '3': THREE.MOUSE.ROTATE}[event.key];
+    if (isTyping(event.target) || event.target?.isContentEditable || event.ctrlKey || event.metaKey) return;
+    const key = navigationKeys.get(event.code) || event.key;
+    if (['1', '2', '3'].includes(key)) {
+      this._navigationKeys ??= new Set();
+      this._navigationKeys.add(event.code || key);
+      this._navigationKey = key;
+      this.controls.mouseButtons.LEFT = {'1': THREE.MOUSE.PAN, '2': THREE.MOUSE.DOLLY, '3': THREE.MOUSE.ROTATE}[key];
       event.preventDefault();
     }
     if (event.key.toLowerCase() === 'f' && !event.ctrlKey && !event.metaKey) this.frameModel({all:event.shiftKey});
   }
 
   _handleKeyUp(event) {
-    if (!event || event.key === this._navigationKey) {
-      this._navigationKey = null;
-      if (this.controls.mouseButtons) this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
-    }
+    if (event) this._navigationKeys?.delete(event.code || event.key);
+    else this._navigationKeys?.clear();
+    const held = this._navigationKeys && [...this._navigationKeys].at(-1);
+    this._navigationKey = navigationKeys.get(held) || held || null;
+    if (this.controls.mouseButtons) this.controls.mouseButtons.LEFT =
+      {'1': THREE.MOUSE.PAN, '2': THREE.MOUSE.DOLLY, '3': THREE.MOUSE.ROTATE}[this._navigationKey] ?? THREE.MOUSE.ROTATE;
   }
 
   setActive(active) {
     if (this._disposed) return;
     this._active = Boolean(active);
+    if (!this._active) this.pivotNavigation?.cancel();
     this.controls.enabled = this._active && !this._povOrbitState;
     this._handleKeyUp();
     this.renderer.setAnimationLoop(this._active ? this._renderCallback : null);
@@ -164,6 +175,7 @@ export class PreviewViewport {
     this.canvas.removeEventListener('contextmenu', this._contextmenu);
     this.canvas.removeEventListener('pointerdown', this._pointerdown);
     this.controls.removeEventListener('change', this._controlsChange);
+    this.pivotNavigation.dispose();
     this.controls.dispose();
     this._clear();
     this._environmentTarget?.dispose();
@@ -238,6 +250,7 @@ export class PreviewViewport {
   }
 
   _clear() {
+    this.pivotNavigation?.reset();
     this._restoreOrbitCamera();
     this._assetGeneration = (this._assetGeneration || 0) + 1;
     this._materialLibrary?.dispose();
@@ -674,6 +687,7 @@ export class PreviewViewport {
     const bone = this.options.pov && this._loadedAsset && this._povCameraBone();
     if (!bone) { this._restoreOrbitCamera(); return; }
     if (!this._povOrbitState) {
+      this.pivotNavigation?.cancel();
       // Drain old orbit inertia before preserving the view to return to.
       const damping = this.controls.enableDamping;
       this.controls.enableDamping = false;
@@ -724,6 +738,7 @@ export class PreviewViewport {
   frameModel({all = false} = {}) {
     if (!this.models.length) return;
     if (this._povOrbitState) { this._updatePOVCamera(); this.invalidate(); return; }
+    this.pivotNavigation?.reset();
     const fullBounds = new THREE.Box3(), placements = [];
     for (const model of this.models) {
       const placement = new THREE.Box3();

@@ -90,12 +90,14 @@ const click = locator => executable ? locator.dispatchEvent('click') : locator.c
   await launch();
   assert.equal(await page.title(),'Avolition');
   assert.equal(await page.locator('#objects-button, [popovertarget="objects-menu"]').count(),0);
-  assert.equal(await page.locator('#objects-menu').isVisible(),true,'Objects remain available without opening a popover.');
+  assert.equal(await page.locator('#objects-list').isHidden(),true,'The tree starts folded.');
+  await click(page.locator('#objects-menu > summary'));
+  assert.equal(await page.locator('#objects-list').isVisible(),true);
   assert.equal(await page.locator('.inspector-panel #objects-menu').count(),1,'Objects belong in the right inspector.');
   assert.equal(await page.locator('#objects-list').getAttribute('role'),'tree');
   assert.equal(await page.locator('#objects-list [data-kind="model"]').count(),0);
   assert.equal(await page.locator('#app-logo, .avolition-empty-logo, .empty-note').count(),0,'The workspace has no header or empty-preview branding.');
-  assert.equal(await page.locator('.local-badge .version').innerText(),'v0.8.29');
+  assert.equal(await page.locator('.local-badge .version').innerText(),'v0.8.35');
   const palette = await page.evaluate(() => {
     const rgb = value => (value.match(/[\d.]+/g)||[]).slice(0,3).map(Number);
     return [...document.querySelectorAll('select, option, optgroup')].map(element => {
@@ -187,7 +189,7 @@ const click = locator => executable ? locator.dispatchEvent('click') : locator.c
   assert.equal(await weapon.getAttribute('aria-expanded'),'false');
   assert.equal(await page.locator('#frame-input').inputValue(),'12','Tree arrow keys do not scrub the animation.');
   await page.keyboard.press('Escape');
-  assert.equal(await page.locator('#objects-menu').isVisible(),true,'Escape does not hide the permanent object panel.');
+  assert.equal(await page.locator('#objects-menu').isVisible(),true,'Escape keeps the opened scene tree available.');
   await page.locator('#tab-toolchain').dispatchEvent('click'); await page.locator('#tab-animations').dispatchEvent('click');
   assert.equal(await weapon.getAttribute('aria-expanded'),'false','Tab switches preserve tree expansion.');
   await click(expander(weapon));

@@ -1,6 +1,7 @@
 """Native scene contract tests; the fake API does not replace real C4D QA."""
 import copy
 import math
+import struct
 from pathlib import Path
 import sys
 import tempfile
@@ -8,7 +9,7 @@ from types import ModuleType, SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from owpreview.c4d_scene import build_scene, _matrix_values, _matrix, _ordered_graph, _check_poses, IDENTITY
+from owpreview.c4d_scene import build_scene, _skin, _matrix_values, _matrix, _ordered_graph, _check_poses, IDENTITY
 
 
 class Vec(tuple):
@@ -220,7 +221,7 @@ def make_api():
              'SAVEDOCUMENTFLAGS_DONTADDTORECENTLIST FORMAT_C4DEXPORT PLUGINTYPE_MATERIAL PLUGINTYPE_SHADER '
              'RDATA_RENDERENGINE BIT_VPDISABLED Tmotionsystem Omotionclip CTpla '
              'ID_BASEOBJECT_ABS_SCALE ID_BASEOBJECT_FROZEN_SCALE ID_MT_LAYER_VALUE ID_MT_LAYER_MODE '
-             'ID_MT_LAYER_MODE_MIX ID_MT_CLIP_SOURCE ID_MT_CLIP_START ID_MT_CLIP_END '
+             'ID_MT_LAYER_MODE_MIX ID_MT_CLIP_SOURCE ID_MT_CLIP_START ID_MT_CLIP_END ID_MT_CLIP_TIMWARPWND '
              'GETBRANCHINFO_NONE NLAbase').split()
     for name in names: setattr(api, name, name)
     api.VECTOR_X, api.VECTOR_Y, api.VECTOR_Z = 0, 1, 2
@@ -233,6 +234,11 @@ def make_api():
     api.BaseTag,api.BaseList2D=Node,Node
     api.COPYFLAGS_NONE,api.COPYFLAGS_NO_HIERARCHY,api.COPYFLAGS_NO_BRANCHES=0,4,128
     api.DescID, api.DescLevel, api.CTrack, api.BaseTime = DescID, DescLevel, Track, BaseTime
+    class SplineData:
+        def MakeLinearSplineLinear(self, count):
+            self.count = count
+            return True
+    api.SplineData = SplineData
     api.plugins = SimpleNamespace(FindPlugin=lambda *a: True)
     api.utils = SimpleNamespace(GetOptimalAngle=lambda old, new, order: new)
     api.modules = ModuleType('c4d.modules'); api.modules.character = SimpleNamespace(CAWeightTag=WeightTag)
@@ -283,6 +289,7 @@ class NativeSceneTests(unittest.TestCase):
                         self.assertEqual(doc.nla.children[0][SOURCE_END].Get(),49/fps)
                         clip=doc.roots[0].children[0].children[0].tags[0].nla.children[0].motion.children[0]
                         self.assertEqual(clip[api.ID_MT_CLIP_END].Get(),49/fps)
+                        self.assertEqual(clip[api.ID_MT_CLIP_TIMWARPWND].count, 2)
                     self.assertTrue(report['verifiedNativeScene'])
 
     def test_pose_check_accepts_native_translation_cancellation_without_relaxing_basis(self):
@@ -298,6 +305,17 @@ class NativeSceneTests(unittest.TestCase):
         changed=origin.copy();changed[0]=.0002
         with self.assertRaisesRegex(RuntimeError,'pose differs'):
             _check_poses([[origin]],[[changed]],'pose differs')
+
+    def test_motion_clip_rejects_failed_linear_timing_creation(self):
+        api, payload = make_api(), fixture()
+        payload['motionClip'] = True
+        with tempfile.TemporaryDirectory() as temp, patch.dict(sys.modules, {
+                'c4d': api, 'c4d.modules': api.modules}), patch.object(
+                api.SplineData, 'MakeLinearSplineLinear', return_value=False):
+            with self.assertRaisesRegex(RuntimeError, 'Motion Clip timing spline'):
+                build_scene(payload, Path(temp) / 'scene.c4d')
+        self.assertEqual(api.saved, [])
+        self.assertEqual(len(api.killed), 1)
 
     def test_motion_clip_belongs_to_renamed_skeleton_with_no_scale_keys(self):
         from owpreview.c4d_motion import motion_snapshot
@@ -486,6 +504,34 @@ class NativeSceneTests(unittest.TestCase):
                 self.assertEqual(result['boneCount'], 1)
                 self.assertEqual(result['skinCount'], int(include_mesh))
                 self.assertEqual(result['trackCount'], 6)
+
+    def test_native_weight_quantization_preserves_normalized_totals(self):
+        api = make_api()
+        joints = [Node() for _ in range(4)]
+        obj = Node()
+        mesh = dict(name='Skin', positions=[0]*15, skinIndices=[
+            2, 1, 0, 3,  3, 1, 3, 0,  3, 1, 0, 2,  0, 1, 2, 3,  2, 1, 0, 3],
+            skinWeights=[.5, .5, 0, 0,  .2, .2, .1, 0,  .03, 0, 0, 0,
+                         128/255, 109/255, 14/255, 4/255,  1e-12, 1, 0, 0])
+        self.assertTrue(_skin(api, api.modules.character, obj, mesh, joints, actor_weights=True))
+        tag = obj.tags[0]
+
+        def stored(joint, point):
+            # Native SetWeightMap reduces float32 to an unsigned 16-bit fraction.
+            number = tag.weights[joint][point]
+            return int(struct.unpack('f', struct.pack('f', number))[0] * 65535)
+
+        actual = [[stored(j, p) for j in range(4)] for p in range(5)]
+        self.assertEqual(actual, [[0, 32768, 32767, 0], [0, 26214, 0, 39321],
+                                  [0, 0, 0, 65535], [128*257, 109*257, 14*257, 4*257],
+                                  [0, 65535, 0, 0]])
+        self.assertTrue(all(sum(values) == 65535 for values in actual))
+        for values, message in (([0]*4, 'no valid skin influence'),
+                                ([float('nan'), 1, 0, 0], 'invalid skin influence'),
+                                ([.2]*5, 'invalid skin array length')):
+            with self.subTest(values=values), self.assertRaisesRegex(ValueError, message):
+                _skin(api, api.modules.character, Node(), dict(mesh, positions=[0]*3,
+                      skinIndices=[0]*len(values), skinWeights=values), joints, actor_weights=True)
 
     def test_native_graph_skin_bind_rest_materials_keys_and_detached_save(self):
         api = make_api()

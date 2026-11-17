@@ -1,3 +1,43 @@
+# Avolition 0.8.35 and C4D Bridge 0.7.14
+
+Built from the 0.8.34 release baseline. Export Manager calls individual file export Cinema export. Stager rig creation uses its Motion System target as the root-motion object automatically. The Actor override control has been removed. Stager remains independently developed and packaged.
+
+Animations, Maps and Browse models share surface-pivot navigation adapted from Stager 0.22.0. Left/middle/right drag orbit, pan and dolly, with Alt and held 1/2/3 shortcuts. Wheel dolly uses the pointer's surface and empty space uses the previous pivot depth. Viewport navigation tips are removed.
+
+The bridge explicitly creates a linear Motion Clip Timing spline. Cinema's default Bezier identity introduces small sub-frame time shifts, which caused the cinematic1 60 FPS export to fail pose validation. The original validation tolerances, source keys and interpolation are retained. Both standalone exports and newly staged sources use the corrected clip constructor. Install the bundled Bridge 0.7.14 to receive this native fix.
+# Avolition 0.8.34 and C4D Bridge 0.7.13
+
+Animation setup and Map export have permanent panels. Each workflow has a separate Library source row, with Scene objects under a disclosure. Export Manager opens on Stager rig and provides individual exports under Manual files. The separate Stager 0.19.1 release supplies the registration repair API for broken links in an existing project.
+
+# Avolition 0.8.33
+
+Animations shares its library source field with the workflow header. The model selector opens Animation setup, a keyboard-accessible popover with the current target, clip assignments, nickname and queue action. Library filters, clip details and viewport settings use native disclosures. The object hierarchy and transport remain visible. The playback row adapts to the width of the preview panel.
+
+# Avolition 0.8.32
+
+The Gameplay3P library filter now considers the selected model, all identical copies of a clip, its joint coverage and the original 5 cm frame-zero head/camera check. It uses measured bindings and retains the saved hideOriginPoses preference. A positive match from the body's own model folder protects partial clips from the cross-model coverage rule. The rule can also recognize transferred motion that drives the torso and both legs.
+
+Toolchain uses a single Load heroes button for its existing catalog job. That job reads heroes and unlocks, then switching hero or category updates assets locally. The Windows executable, window icon and favicon use the supplied artwork. C4D Bridge remains at 0.7.12.
+
+# Avolition 0.8.31 and C4D Bridge 0.7.12
+
+Gameplay3P filtering uses the loaded root body's Head (Camera fallback) in model space at frame zero. The library reads the first pose of its ancestor chain alongside existing batched bone matching. The 5 cm filter applies to browsing. Both backends persist the default-on preference.
+
+Actor setup export accepts different track sets. In the Go combined-set sampler, Actor insertion retries a sheared local transform using frame-zero world scales and the original evaluated joint positions and rotations. A rig import warning identifies the approximation. The bridge writes skin influences for a new Actor using 65,535 integer weight units per point. Registered rigs keep their existing Weight tags on re-import.
+
+The exporter owns its desktop styling, library, export payload and C4D bridge. Stager 0.16.0 continues to own the viewer, bindings and take recording. The released registration API is the only integration entry point used to register the rig. Each project is packaged independently.
+
+# Handoff for Avolition 0.8.30 and C4D Bridge 0.7.11
+
+The Electron host and Go core add `stager_rig_destination(ids)` and
+`create_stager_rig(request)`. The first resolves saved entries and reviews the
+active document and cameras through the local mailbox. The second addresses
+that same bridge instance and document. It samples each entry with the
+combined-export evaluator and sends one entity, one texture set and separate
+native action payloads. The legacy Python reference intentionally exposes
+these two API names with a desktop-core-required error. File export remains
+available in both implementations.
+
 # Handoff: 0.8.29, Gameplay1P clavicles start at zero Y
 
 ## 0.8.29 follow-up

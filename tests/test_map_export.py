@@ -139,7 +139,7 @@ class MapExportTests(unittest.TestCase):
         self.assertEqual(bridge.calls[0]['animation']['tracks'], [])
 
     def test_old_bridge_and_disconnection_fail_before_output_creation(self):
-        for bridge, message in ((MockBridge(capability=False), r'bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.10'),
+        for bridge, message in ((MockBridge(capability=False), r'bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.14'),
                                 (MockBridge(connected=False), 'disconnected')):
             output = self.root / 'never-created'
             with patch('owpreview.map_export.bake_materials') as bake:

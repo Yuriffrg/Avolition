@@ -1,0 +1,118 @@
+/* Animation and map workspaces share their library and inspector proportions. */
+.animation-workflow > .workspace {
+  grid-template-columns: clamp(208px, 17vw, 252px) minmax(350px, 1fr) clamp(250px, 21vw, 320px);
+}
+.animation-workflow .library-panel > .panel-heading {
+  height: 40px;
+  padding: 0 12px;
+}
+.rail-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  width: fit-content;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+  list-style: none;
+}
+.rail-disclosure > summary::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border: solid currentColor;
+  border-width: 1px 1px 0 0;
+  color: var(--muted);
+  transform: rotate(45deg);
+}
+.rail-disclosure[open] > summary::before { transform: rotate(135deg); }
+.rail-disclosure > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.rail-disclosure > summary:hover { color: var(--accent); }
+.clip-finder {
+  margin: 0 10px 7px;
+  position: relative;
+  background: transparent;
+  border: 0;
+}
+.clip-finder > .search-box {
+  position: absolute;
+  inset: 0 65px auto 0;
+}
+.clip-finder > .search-box input {
+  height: 30px;
+  border: 1px solid var(--control-border);
+  background: var(--field);
+  border-radius: 3px;
+}
+.clip-finder .search-box .icon { top: 8px; }
+#library-filters > summary {
+  margin-left: auto;
+  width: 60px;
+  justify-content: center;
+  border: 1px solid var(--control-border);
+  border-radius: 3px;
+  background: var(--raised);
+  font-size: 11px;
+}
+.clip-filter-fields {
+  display: grid;
+  gap: 9px;
+  padding: 10px 0 3px;
+}
+.clip-filter-fields .library-toggles,
+.clip-filter-fields .library-object-control,
+.clip-filter-fields .library-toolbar { margin: 0; }
+.clip-filter-fields .library-toolbar { display: grid; gap: 4px; }
+.clip-filter-fields .library-toolbar label {
+  font-size: 11px;
+  letter-spacing: .2px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.clip-filter-fields select { width: 100%; min-width: 0; }
+#workflow-animations .library-columns { padding: 6px 12px; }
+#workflow-animations .clip-row {
+  min-height: 54px;
+  padding: 7px 12px;
+}
+#workflow-animations .clip-row:has(.clip-coverage) { row-gap: 4px; }
+#workflow-animations .clip-coverage { gap: 3px; }
+.animation-workflow .inspector-panel {
+  overflow: auto;
+  scrollbar-width: thin;
+  background: var(--panel);
+}
+.inspector-panel > .rail-disclosure {
+  flex: none;
+  margin: 0;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--rail);
+}
+.inspector-panel > .rail-disclosure > summary {
+  min-height: 36px;
+  width: 100%;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.inspector-panel > .rail-disclosure > summary:is(:hover,:focus-visible) { color: var(--ink); }
+.inspector-panel .clip-identity { padding: 4px 0 10px; gap: 4px; }
+.inspector-panel .clip-metadata { padding: 0 0 10px; gap: 5px; }
+.inspector-panel .match-message { margin: 0 0 8px; }
+.object-disclosure .objects-toolbar { padding: 3px 0 8px; }
+.object-disclosure .objects-list {
+  max-height: min(38vh, 400px);
+  margin-inline: -14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.object-disclosure .objects-note { padding: 6px 0 8px; border: 0; }
+.inspector-panel .view-toggles { padding: 4px 0 7px; gap: 9px; }
+.inspector-panel .view-note { margin: 3px 0 10px; }
+.maps-inspector > .map-notes { padding-inline: 14px; }

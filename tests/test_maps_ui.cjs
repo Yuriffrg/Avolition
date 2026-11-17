@@ -118,6 +118,10 @@ async function rename(key,name){const node=page.locator(`#maps-objects-list [dat
  await page.waitForFunction(()=>window.qaViewports?.viewport?.models.length===2&&document.querySelector('#viewport-loading').hidden);
  const animationIds=await page.evaluate(()=>window.qaViewports.viewport.models.map(m=>m.source.id));
  await click(page.locator('#tab-maps'));assert.equal(await page.locator('#workflow-maps').isVisible(),true);
+ assert.equal(await page.locator('#maps-objects-list').isHidden(),true);
+ await click(page.locator('#maps-objects-menu > summary'));
+ await click(page.locator('#maps-details > summary'));
+ await click(page.locator('#maps-viewport-settings > summary'));
  if(executable)await nativeRootPicker(assets);
  else {await page.locator('#maps-root').fill(assets);await click(page.locator('#maps-scan'));}
  await page.waitForFunction(()=>document.querySelector('#maps-count').textContent==='2');
@@ -216,6 +220,7 @@ async function rename(key,name){const node=page.locator(`#maps-objects-list [dat
   assert.deepEqual(await application.evaluate(()=>globalThis.qaOpenedPaths),[output]);
   report.nativeOpenOutput={realBackendValidation:true,mockedShellOnly:true,path:output};
   await closeNative();await launch();
+  await click(page.locator('#maps-objects-menu > summary'));
   assert.equal(await page.locator('#tab-maps').getAttribute('aria-selected'),'true');
   assert.equal(await page.locator('#workflow-maps').isVisible(),true);
   assert.equal(await page.locator('#maps-root').inputValue(),assets);

@@ -68,6 +68,7 @@ const report = {mockedApis: true, realExtraction: false, scratch};
   assert.equal(await page.locator('#workflow-toolchain').isVisible(),true);
   assert.equal(await page.locator('#workflow-animations').isVisible(),false);
   assert.equal(await page.locator('#toolchain-install').isVisible(),true);
+  assert.equal(await page.getByRole('button',{name:'Load assets',exact:true,includeHidden:true}).count(),0);
   assert.equal(await page.locator('#toolchain-export').isDisabled(),true);
   await page.locator('#tab-animations').click();
   assert.equal(await page.locator('#toolchain-directories').isVisible(),false);
@@ -112,10 +113,22 @@ const report = {mockedApis: true, realExtraction: false, scratch};
   assert.equal(await page.locator('#toolchain-update').isDisabled(),true);
   assert.equal(await page.locator('#toolchain-cancel').isDisabled(),false);
   await page.evaluate(async () => {
-    window.snapshot.job={...window.snapshot.job,busy:false,state:'Completed',catalog:{install:window.settings.overwatchInstall,heroes:[{id:'test',name:'Hero Fixture'}],unlocks:{'Hero Fixture':[{id:'skin-fixture',name:'Skin Fixture | Literal',category:'skin'},{id:'emote-fixture',name:'Emote Fixture',category:'emote'}]}}};
+    window.snapshot.job={...window.snapshot.job,busy:false,state:'Completed',catalog:{install:window.settings.overwatchInstall,
+      heroes:[{id:'test',name:'Hero Fixture'},{id:'other',name:'Other Hero'}],unlocks:{
+        'Hero Fixture':[{id:'skin-fixture',name:'Skin Fixture | Literal',category:'skin'},{id:'emote-fixture',name:'Emote Fixture',category:'emote'}],
+        'Other Hero':[{id:'other-skin',name:'Other Skin',category:'skin'}]}}};
     await window.controller.refresh();
   });
+  const assetNames = () => page.locator('#toolchain-asset option').allTextContents();
+  await page.locator('#toolchain-hero').selectOption('Other Hero');
+  assert.deepEqual(await assetNames(),['All assets in this category','Other Skin']);
   await page.locator('#toolchain-hero').selectOption('Hero Fixture');
+  await page.locator('#toolchain-category').selectOption('emote');
+  assert.deepEqual(await assetNames(),['All assets in this category','Emote Fixture']);
+  await page.locator('#toolchain-category').selectOption('skin');
+  assert.deepEqual(await assetNames(),['All assets in this category','Skin Fixture | Literal']);
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==='toolchain_list').length),1,
+    'The hero catalog supplies each selection without another listing job.');
   await page.locator('#toolchain-asset').selectOption('Skin Fixture | Literal');
   await page.locator('#toolchain-export').click();
   await page.waitForFunction(() => document.querySelector('#toolchain-job-state').textContent==='Exporting');

@@ -182,7 +182,7 @@ class C4DExportTests(unittest.TestCase):
         bridge = BridgeClient(self.queue)
         self.assertTrue(bridge.status()['connected'])
         self.assertIn('0.7.2', bridge.status()['message'])
-        with self.assertRaisesRegex(RuntimeError, r'bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.10'):
+        with self.assertRaisesRegex(RuntimeError, r'bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.14'):
             bridge.export({'mapInstances': True}, self.root/'out.c4d', self.root/'tex')
         self.assertFalse((self.queue/'jobs').exists())
         self.assertFalse((self.root/'out.c4d').exists())
@@ -201,7 +201,7 @@ class C4DExportTests(unittest.TestCase):
                     status[capability] = advertised
                     payload = {flag: True, 'mapInstances': flag == 'mapTiming24'}
                     with patch.object(bridge, 'status', return_value=status):
-                        with self.assertRaisesRegex(RuntimeError, r'updated motion clip and map timing support.*0\.7\.10'):
+                        with self.assertRaisesRegex(RuntimeError, r'updated motion clip and map timing support.*0\.7\.14'):
                             bridge.export(payload, self.root/'out.c4d', self.root/'tex')
                     self.assertFalse((self.queue/'jobs').exists(), 'Reject before writing a request or texture copy.')
                     self.assertFalse((self.root/'out.c4d').exists())

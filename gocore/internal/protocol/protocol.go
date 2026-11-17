@@ -22,7 +22,7 @@ var Methods = []string{
 	"toolchain_status", "toolchain_check", "toolchain_install", "toolchain_validate", "toolchain_list",
 	"toolchain_start", "toolchain_cancel", "analysis_start", "analysis_status", "analysis_index", "analysis_detail",
 	"read_clip_bindings", "library_settings", "export_queue_save", "export_queue_remove",
-	"export_queue_run", "open_export_output", "maps_settings", "scan_maps", "load_map", "export_map",
+	"export_queue_run", "stager_rig_destination", "create_stager_rig", "open_export_output", "maps_settings", "scan_maps", "load_map", "export_map",
 	"export_map_start", "export_map_status", "browse_map", "open_map_output", "object_names", "save_object_name",
 }
 

@@ -1,0 +1,92 @@
+/* The source belongs to the active workflow, below the navigation. */
+.animation-workflow > .source-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 14px;
+  background: var(--rail);
+  border-bottom: 1px solid var(--line);
+}
+.animation-workflow .root-control { flex: 0 1 760px; min-width: 0; gap: 14px; }
+.animation-workflow .root-control > label { width: auto; font-size: 12px; letter-spacing: 0; }
+.animation-workflow .source-bar .button,
+.animation-workflow .root-control input { height: 30px; font-size: 12px; }
+.animation-workflow .source-bar .button { padding-inline: 10px; }
+.animation-workflow .root-control .icon { inset: 7px auto auto 8px; width: 16px; height: 16px; }
+.animation-workflow .root-control input { padding: 0 10px 0 30px; }
+.animation-workflow .source-help { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+.entity-toolbar {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 0;
+  padding: 6px 10px;
+}
+.entity-toolbar > label { font-size: 12px; letter-spacing: 0; }
+.entity-controls { flex: 1; min-width: 0; gap: 5px; }
+.entity-toolbar :is(select,button) { height: 32px; font-size: 12px; }
+.entity-toolbar button { padding-inline: 9px; }
+#entity-select, #rig-select {
+  min-width: 0;
+  padding-block: 0;
+  line-height: normal;
+  text-overflow: ellipsis;
+}
+.setup-panel {
+  flex: none;
+  min-width: 0;
+  padding: 16px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.setup-heading, .setup-field-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.setup-heading { margin-bottom: 15px; }
+.setup-heading h2 { font-size: 16px; font-weight: 600; letter-spacing: -.2px; }
+.setup-panel :is(.setup-field-heading label,.animation-set-name-label), .map-setup > label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+#clear-object-animation { font-size: 11px; }
+.setup-panel .animation-target-controls { margin-top: 5px; }
+#rig-select { width: 100%; height: 32px; font-size: 12px; }
+#object-animation-status, .setup-panel .animation-set-help, .setup-panel .animation-set-export-status {
+  font-size: 11px;
+  line-height: 1.45;
+}
+#object-animation-status { margin-top: 7px; }
+.setup-panel .animation-set { max-height: min(28vh, 230px); margin: 12px 0; }
+.setup-panel .animation-set-row {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 2px 6px;
+  padding: 6px;
+}
+.setup-panel .animation-set-object {
+  justify-self: start;
+  max-width: 100%;
+  padding: 2px 4px;
+  font-size: 11px;
+}
+.setup-panel .animation-set-clip { grid-row: 2; grid-column: 1; padding-left: 4px; font-size: 12px; }
+.setup-panel .animation-set-clear { grid-column: 2; grid-row: 1 / span 2; }
+.setup-panel .animation-set-export-row { gap: 5px; }
+.setup-panel .animation-set-export-row > :is(input,button) { height: 32px; font-size: 12px; }
+.setup-panel .export-manager-launch { margin-top: 14px; padding: 0; }
+.setup-panel .export-manager-launch > .button { height: 32px; }
+.map-setup > label { display: block; margin: 12px 0 5px; }
+.map-setup input[type="text"] { width: 100%; height: 32px; font-size: 12px; }
+.map-output-row { display: flex; gap: 5px; }
+.map-output-row .button { height: 32px; padding-inline: 9px; }
+.map-setup .map-export-options { justify-content: space-between; gap: 5px; flex-wrap: wrap; }
+#maps-export { width: 100%; margin-top: 14px; }
+.map-setup .spinner { margin-top: 8px; }

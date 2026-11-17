@@ -1,3 +1,4 @@
+const {openAnimationSetup} = require('./open-animation-setup.cjs');
 // Real binary fixtures and browser: choosing an attached rig breaks equal
 // joint-match ties by its assigned parent's duration without changing sort modes.
 const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -58,8 +59,10 @@ for name, duration, fps in [('Arms', 16, 30), ('A long weapon', 61, 60), ('Z mat
     assert.ok(before.indexOf('A long weapon') < before.indexOf('Z matching weapon'));
     await page.locator('.clip-row').filter({hasText:'Arms'}).click();
     await page.waitForFunction(()=>document.querySelectorAll('#animation-set .animation-set-row').length===1 && document.querySelector('#viewport-loading').hidden);
+    await page.locator('#objects-menu > summary').click();
     await page.locator('#objects-list [data-kind="model"][data-model-id="model-1"] > .object-tree-row .object-tree-name').click();
     assert.equal(await page.locator('#rig-select').inputValue(),'model-1');
+    await page.locator('#library-filters > summary').click();
     const prioritized = await names();
     assert.ok(prioritized.indexOf('Z matching weapon') < prioritized.indexOf('A long weapon'));
     assert.match(await page.locator('#library-match-status').innerText(),/Equal bone matches favor 0\.50 s clips/);
@@ -69,10 +72,12 @@ for name, duration, fps in [('Arms', 16, 30), ('A long weapon', 61, 60), ('Z mat
     assert.ok(alphabetical.indexOf('A long weapon') < alphabetical.indexOf('Z matching weapon'));
     assert.doesNotMatch(await page.locator('#library-match-status').innerText(),/Equal bone matches/);
     await page.locator('#clip-sort').selectOption('object-match');
+    await openAnimationSetup(page);
     await page.locator('#rig-select').selectOption('model-0');
     const ownAssignment = await names();
     assert.ok(ownAssignment.indexOf('A long weapon') < ownAssignment.indexOf('Z matching weapon'));
     assert.doesNotMatch(await page.locator('#library-match-status').innerText(),/Equal bone matches/);
+    await openAnimationSetup(page);
     await page.locator('#clear-object-animation').click();
     await page.locator('#rig-select').selectOption('model-1');
     assert.deepEqual(await names(), before);

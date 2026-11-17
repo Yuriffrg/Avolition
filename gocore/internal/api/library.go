@@ -139,6 +139,7 @@ func (a *API) libraryOptionsLocked() *ordered.Map[any] {
 		options.Set("sort", "object-match")
 	}
 	options.Set("hideDuplicates", getOr(saved, "hideDuplicates", true) != false)
+	options.Set("hideOriginPoses", getOr(saved, "hideOriginPoses", true) != false)
 	return options
 }
 
@@ -149,7 +150,7 @@ func (a *API) LibrarySettings(changes any) (any, error) {
 	options := a.libraryOptionsLocked()
 	if changes != nil {
 		dict, ok := dictOf(changes)
-		if !ok || !keysSubset(dict, "sort", "hideDuplicates") {
+		if !ok || !keysSubset(dict, "sort", "hideDuplicates", "hideOriginPoses") {
 			return nil, newValueError("Invalid animation library settings.")
 		}
 		if value, found := dict.Get("sort"); found && !isLibrarySort(value) {
@@ -158,6 +159,11 @@ func (a *API) LibrarySettings(changes any) (any, error) {
 		if value, found := dict.Get("hideDuplicates"); found {
 			if _, isBool := value.(bool); !isBool {
 				return nil, newValueError("Hide duplicates must be on or off.")
+			}
+		}
+		if value, found := dict.Get("hideOriginPoses"); found {
+			if _, ok := value.(bool); !ok {
+				return nil, newValueError("Hide near-origin poses must be on or off.")
 			}
 		}
 		dict.Range(func(k string, v any) bool { options.Set(k, v); return true })

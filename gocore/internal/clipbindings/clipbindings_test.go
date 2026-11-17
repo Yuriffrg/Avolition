@@ -84,6 +84,25 @@ func TestExactArbitraryNamesAndEmptyRecordsMatchFullParser(t *testing.T) {
 	}
 }
 
+func TestFrameZeroUsesOnlyRequestedAncestorsAndLastDuplicate(t *testing.T) {
+	source := newFixture(t).write("Pose.owanimclip", clip(31,
+		bone("Head", ft.Track{Kind: 0, Keys: []ft.Key{ft.K(12, 9, 9, 9), ft.K(3, 1, 2, 3), ft.K(3, 2, 1, 0)}}),
+		bone("Neck", ft.Track{Kind: 1, Keys: []ft.Key{ft.K(7, 0, 0, 0, 2)}}),
+		bone("Finger", ft.Track{Kind: 0, Keys: []ft.Key{ft.K(0, 4, 5, 6)}})))
+	result, err := NewDefault().ReadWithPose([]any{source}, []any{"Head", "Neck"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := result.Clips[0]
+	want := []formats.ClipBone{
+		{Name: "Head", Positions: &formats.Track{Frames: []uint32{3}, Values: []float64{2, 1, 0}}},
+		{Name: "Neck", Rotations: &formats.Track{Frames: []uint32{7}, Values: []float64{0, 0, 0, 1}}},
+	}
+	if !reflect.DeepEqual(row.BoneNames, []string{"Head", "Neck", "Finger"}) || !reflect.DeepEqual(row.FirstPose, &want) {
+		t.Fatalf("frame-zero result: %+v", row)
+	}
+}
+
 func TestSuccessfulEmptyClipIsNotAParseError(t *testing.T) {
 	f := newFixture(t)
 	source := f.write("Empty.owanimclip", clip(1))

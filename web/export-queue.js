@@ -1,29 +1,70 @@
 // Entries capture source paths and per-object assignments. Selection is deliberately
 // session-only: restoring a list never opts an entry into writing files.
+import {editStagerRig, setupNickname} from './stager-rig.js';
+
 export function createExportQueue(api, hooks) {
   const $ = id => document.getElementById(id);
   let entries = [], selected = new Set(), results = new Map();
   let mutation = null, batch = null;
+  let mode = 'rig';
+  const tabs = [$('export-rig-tab'), $('export-files-tab')];
+  const messages = new Map();
   const busy = () => Boolean(mutation || batch || hooks.closing());
   const sourceName = value => String(value || '').split(/[\\/]/).pop();
   function message(text, error = false) {
+    messages.set(mode, {text, error});
+    if (mode === 'rig') $('stager-warnings').hidden = true;
     $('export-queue-status').textContent = text;
     $('export-queue-status').classList.toggle('error', error);
+  }
+  function selectTab(tab) {
+    if (busy()) return;
+    mode = tab === tabs[0] ? 'rig' : 'files';
+    for (const item of tabs) {
+      const active = item === tab;
+      item.tabIndex = active ? 0 : -1;
+      item.setAttribute('aria-selected', String(active));
+      $(item.getAttribute('aria-controls')).hidden = !active;
+    }
+    const panel = $(tab.getAttribute('aria-controls'));
+    panel.querySelector('.export-mode-help').after($('export-queue-group'));
+    $('create-stager-rig').hidden = mode === 'files';
+    $('open-export-output').hidden = $('export-selected').hidden = mode === 'rig';
+    const status = messages.get(mode);
+    $('export-queue-status').textContent = status?.text || '';
+    $('export-queue-status').classList.toggle('error', Boolean(status?.error));
+    render();
+  }
+  for (const tab of tabs) {
+    tab.addEventListener('click', () => selectTab(tab));
+    tab.addEventListener('keydown', event => {
+      let next;
+      if (event.key === 'Home') next = tabs[0];
+      else if (event.key === 'End') next = tabs[1];
+      else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') next = tabs.find(item => item !== tab);
+      else return;
+      event.preventDefault();
+      selectTab(next);
+      next.focus();
+    });
   }
   function render() {
     const list = $('export-queue-list'); list.replaceChildren();
     for (const entry of entries) {
       const row = document.createElement('div'); row.className = 'export-queue-row'; row.role = 'listitem'; row.dataset.exportId = entry.id;
       const check = document.createElement('input'); check.type = 'checkbox'; check.className = 'export-queue-check'; check.dataset.exportId = entry.id;
-      check.checked = selected.has(entry.id); check.disabled = busy(); check.setAttribute('aria-label', `Export ${entry.name}`);
+      const title = mode === 'rig' ? setupNickname(entry) : `${entry.name}.c4d`;
+      check.checked = selected.has(entry.id); check.disabled = busy(); check.setAttribute('aria-label', `Select ${title}`);
       check.addEventListener('change', () => { check.checked ? selected.add(entry.id) : selected.delete(entry.id); updateActions(); });
-      const info = document.createElement('div'); info.className = 'export-queue-info';
-      const name = document.createElement('span'); name.className = 'export-queue-name'; name.textContent = `${entry.name}.c4d`;
+      const info = document.createElement('label'); info.className = 'export-queue-info';
+      check.id = 'export-entry-' + entry.id;
+      info.htmlFor = check.id;
+      const name = document.createElement('span'); name.className = 'export-queue-name'; name.textContent = title;
       const detail = document.createElement('span'); detail.className = 'export-queue-assignment';
-      detail.textContent = `${sourceName(entry.entityPath)} · ${entry.assignments.length} assigned animation${entry.assignments.length === 1 ? '' : 's'} · whole entity`;
+      detail.textContent = `${sourceName(entry.entityPath)} · ${entry.assignments.length} assigned animation${entry.assignments.length === 1 ? '' : 's'}`;
       info.title = [entry.entityPath, ...entry.assignments.map(item => `${item.modelId}: ${item.clipPath}`)].join('\n'); info.append(name, detail);
       const status = document.createElement('span'); status.className = 'export-queue-state';
-      const result = results.get(entry.id); status.textContent = result?.label || 'Ready'; status.title = result?.detail || '';
+      const result = mode === 'files' && results.get(entry.id); status.textContent = result?.label || (mode === 'files' ? 'Ready' : ''); status.title = result?.detail || '';
       if (result?.error) status.classList.add('error');
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'export-queue-remove'; remove.textContent = 'Remove';
       remove.setAttribute('aria-label', `Remove ${entry.name} from export list`); remove.disabled = busy();
@@ -31,12 +72,14 @@ export function createExportQueue(api, hooks) {
     }
     if (!entries.length) {
       const empty = document.createElement('p'); empty.className = 'export-queue-empty';
-      empty.textContent = 'Name an animation setup and choose Add to export. Then check the entries you want to save.'; list.append(empty);
+      empty.textContent = 'Name an animation setup and choose Add to export to queue it here.'; list.append(empty);
     }
     updateActions();
   }
   function updateActions() {
+    for (const tab of tabs) tab.disabled = busy();
     $('export-queue-summary').textContent = `${selected.size} of ${entries.length} selected`;
+    $('create-stager-rig').disabled = !selected.size || busy();
     $('export-selected').disabled = !selected.size || busy();
     $('export-selected').textContent = batch ? 'Exporting…' : 'Export selected';
     $('fbx-options-button').title = `Export Manager · ${entries.length} entries`;
@@ -92,9 +135,41 @@ export function createExportQueue(api, hooks) {
     })(); render();
     try { await batch; } finally { batch = null; render(); }
   }
-  $('fbx-options-button').addEventListener('click', () => { render(); $('export-menu').showModal(); $('fbx-options-button').setAttribute('aria-expanded', 'true'); });
+  $('fbx-options-button').addEventListener('click', () => {
+    render();
+    $('export-menu').showModal();
+    tabs.find(tab => tab.tabIndex === 0).focus();
+    $('fbx-options-button').setAttribute('aria-expanded', 'true');
+  });
   $('close-export-menu').addEventListener('click', () => $('export-menu').close());
   $('export-menu').addEventListener('close', () => $('fbx-options-button').setAttribute('aria-expanded', 'false'));
+  $('create-stager-rig').addEventListener('click', async () => {
+    if (busy() || !selected.size) return;
+    mutation = editStagerRig(api, entries.filter(entry => selected.has(entry.id)));
+    render();
+    try {
+      const result = await mutation;
+      if (result) {
+        message(result.message);
+        if (result.warnings.length) {
+          const list = $('stager-warning-list');
+          list.replaceChildren(...result.warnings.map(warning => {
+            const item = document.createElement('li');
+            item.textContent = warning;
+            return item;
+          }));
+          $('stager-warnings').open = false;
+          $('stager-warnings').hidden = false;
+        }
+      }
+    }
+    catch (error) { message(error.message || String(error), true); }
+    finally {
+      mutation = null;
+      render();
+      if ($('export-menu').open) $('create-stager-rig').focus();
+    }
+  });
   $('export-selected').addEventListener('click', runSelected);
   $('open-export-output').addEventListener('click', async () => {
     try { if (!await hooks.saveOutput()) return; const result = await api('open_export_output'); if (typeof result === 'string') message(`Output directory: ${result}`); }
@@ -102,7 +177,7 @@ export function createExportQueue(api, hooks) {
   });
   return {
     restore(value) { entries = Array.isArray(value) ? value : []; selected.clear(); results.clear(); render(); },
-    add, busy, render, exporting: () => Boolean(batch),
+    add, busy, render, exporting: () => Boolean(batch || ($('stager-rig-dialog').open && $('stager-cancel').disabled)),
     async flush() { await mutation; await batch; },
   };
 }

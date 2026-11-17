@@ -53,6 +53,7 @@ const errors=[],report={passed:false,scratch,realAssets:root,mockedApis:false,na
   const coverage=async(name,wanted)=>assert.match(await row(name).locator('.clip-coverage-label').innerText(),wanted);
   const pausePlayback=async()=>{if(await page.locator('#play-pause').getAttribute('aria-label')==='Pause')await page.locator('#play-pause').click();};
   const assignments=()=>page.evaluate(()=>window.qaViewport.assignments.map(({modelId,clip})=>({modelId,path:clip.path})));
+  await page.locator('#library-filters > summary').click();
   await loadEntity(entity3P);
   assert.match(await page.locator('#library-object option:checked').innerText(),/190 bones/);
   await coverage('000000000A07',/186 \/ 190 bones covered · Model folder/);
@@ -64,6 +65,19 @@ const errors=[],report={passed:false,scratch,realAssets:root,mockedApis:false,na
   const order=await page.locator('.clip-name').allTextContents();
   assert.ok(order.indexOf('00000000371D')<order.indexOf('000000000A07'),'241tracks with190 matchingbones rank ahead of190tracks with186 matches.');
 
+  const modelFilter=page.getByRole('checkbox',{name:'Hide unlikely matches'});
+  assert.ok(await modelFilter.isChecked());
+  for (const id of ['015D','0957','0958','0959','0073','0075','00F6','8DAE','04A0']) {
+    assert.equal(await row(id.padStart(12,'0')).count(),0, 'Hide incompatible clip '+id);
+  }
+  for (const id of ['3733','0678','02A6','033B','863B','036B','0FD0']) {
+    assert.equal(await row(id.padStart(12,'0')).count(),1, 'Keep compatible body clip '+id);
+  }
+  await modelFilter.uncheck();
+  await loadEntity(entity3P);
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('.clip-row')).some(
+    el=>el.querySelector('.clip-name')?.textContent==='0000000004A0' && el.title.includes('within 5 cm')));
+  assert.match(await row('00000000015D').getAttribute('title'),/another model/);
   await page.locator('#hide-duplicates').uncheck();
   assert.equal(await page.locator('.clip-row').count(),246);
   await page.locator('#hide-duplicates').check();
@@ -75,6 +89,9 @@ const errors=[],report={passed:false,scratch,realAssets:root,mockedApis:false,na
   await page.waitForFunction(()=>window.qaViewport.assignments.length===1&&document.querySelector('#viewport-loading').hidden);
   await pausePlayback();await page.locator('#timeline').fill('10');
   const saved=await assignments();
+  await modelFilter.check();
+  assert.deepEqual(await assignments(),saved);
+  assert.equal(await page.locator('#timeline').inputValue(),'10');
   await page.locator('#clip-sort').selectOption('tracks-desc');
   await page.locator('#clip-search').fill('00000000023');
   assert.deepEqual(await assignments(),saved,'Sorting and search do not replace assigned animation.');
@@ -85,6 +102,7 @@ const errors=[],report={passed:false,scratch,realAssets:root,mockedApis:false,na
   await page.screenshot({path:path.join(scratch,'body-coverage.png')});
 
   await page.locator('#library-object').selectOption('model-1');
+  assert.ok(await modelFilter.isDisabled());
   assert.equal(await page.locator('#rig-select').inputValue(),'model-1','Sidebar object selector and animation target are the same selection.');
   assert.match(await page.locator('#library-object option:checked').innerText(),/19 bones/);
   await coverage('000000003879',/18 \/ 19 bones covered · Model folder/);
@@ -101,6 +119,8 @@ const errors=[],report={passed:false,scratch,realAssets:root,mockedApis:false,na
   await loadEntity(entity1P);
   await page.locator('#library-object').selectOption('model-0');
   assert.match(await page.locator('#library-object option:checked').innerText(),/85 bones/);
+  assert.ok(await modelFilter.isDisabled());
+  assert.equal(await row('00000000015D').count(),1);
   await coverage('000000000156',/85 \/ 85 bones covered · Model folder/);
   assert.match(await row('000000000156').locator('.clip-original').innerText(),/93 tracks/);
   assert.equal(await row('000000000156').locator('.clip-coverage-fill').evaluate(element=>parseFloat(element.style.width)),100);

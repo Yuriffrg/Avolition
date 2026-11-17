@@ -93,7 +93,7 @@ func init() {
 		"analysis_detail": m("path,root", 1, []any{nil}, "analysis", func(a *API, x []any) (any, error) {
 			return a.analysis.Detail(x[0], x[1])
 		}),
-		"read_clip_bindings": m("paths", 1, nil, "clipBindings", func(a *API, x []any) (any, error) { return a.clipBindings.Read(x[0]) }),
+		"read_clip_bindings": m("paths,pose_bones", 1, []any{nil}, "clipBindings", func(a *API, x []any) (any, error) { return a.clipBindings.Read(x[0], x[1]) }),
 		"library_settings": m("changes", 0, []any{nil}, "", func(a *API, x []any) (any, error) {
 			return a.LibrarySettings(x[0])
 		}),
@@ -101,6 +101,10 @@ func init() {
 		"export_queue_remove": m("ident", 1, nil, "", func(a *API, x []any) (any, error) { return a.ExportQueueRemove(x[0]) }),
 		"export_queue_run": m("ident,output_folder,options", 1, []any{nil, nil}, "bridge,objectNames",
 			func(a *API, x []any) (any, error) { return a.ExportQueueRun(x[0], x[1], x[2]) }),
+		"stager_rig_destination": m("ids", 1, nil, "bridge,objectNames",
+			func(a *API, x []any) (any, error) { return a.StagerRigDestination(x[0]) }),
+		"create_stager_rig": m("request", 1, nil, "bridge,objectNames",
+			func(a *API, x []any) (any, error) { return a.CreateStagerRig(x[0]) }),
 		"open_export_output": m("", 0, nil, "", func(a *API, _ []any) (any, error) { return a.OpenExportOutput() }),
 		"maps_settings":      m("changes", 0, []any{nil}, "", func(a *API, x []any) (any, error) { return a.MapsSettings(x[0]) }),
 		"scan_maps":          m("root", 1, nil, "", func(a *API, x []any) (any, error) { return a.ScanMaps(x[0]) }),

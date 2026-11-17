@@ -256,7 +256,7 @@ func TestNoLegacyCatalogStartsClean(t *testing.T) {
 	a := desktop(t, "")
 	restored := s.data(t, a)
 	assertJSON(t, restored["catalog"], map[string]any{})
-	if restored["browserMode"] != false || restored["appName"] != "Avolition" || restored["version"] != "0.8.29" {
+	if restored["browserMode"] != false || restored["appName"] != "Avolition" || restored["version"] != "0.8.35" {
 		t.Fatalf("bootstrap: %v", restored)
 	}
 	ok(t, call(t, a, "save_annotation", s.clip, s.annotation))
@@ -301,7 +301,7 @@ func TestWhitehoundIsFirstMigrationSourceAndKeepsSettings(t *testing.T) {
 	restored := s.data(t, a)
 	assertJSON(t, restored["catalog"], previous["annotations"])
 	assertJSON(t, restored["exportQueue"], queue)
-	assertJSON(t, restored["libraryOptions"], previous["libraryOptions"])
+	assertJSON(t, restored["libraryOptions"], map[string]any{"sort": "tracks-desc", "hideDuplicates": false, "hideOriginPoses": true})
 	workflow := m(restored["workflow"])
 	if restored["outputFolder"] != s.output || workflow["libraryDirectory"] != customLibrary || workflow["outputDirectory"] != toolchainOutput ||
 		workflow["overwatchInstall"] != install || workflow["activeTab"] != "toolchain" {
@@ -371,7 +371,7 @@ func TestFormatAndSortMigrationsAreSavedOnce(t *testing.T) {
 	boot := okMap(t, call(t, a, "bootstrap"))
 	assertJSON(t, boot["fbxOptions"], map[string]any{"enabled": false, "upAxis": "Z", "includeMesh": false, "bakeTextures": true,
 		"rootMotion": true, "c4dEnabled": true, "clipEnabled": false})
-	assertJSON(t, boot["libraryOptions"], map[string]any{"sort": "object-match", "hideDuplicates": true})
+	assertJSON(t, boot["libraryOptions"], map[string]any{"sort": "object-match", "hideDuplicates": true, "hideOriginPoses": true})
 	saved := readJSON(t, filepath.Join(profile, "catalog.json"))
 	if saved["librarySortRevision"] != float64(1) || m(saved["libraryOptions"])["extra"] != float64(1) {
 		t.Fatalf("saved: %v", saved)

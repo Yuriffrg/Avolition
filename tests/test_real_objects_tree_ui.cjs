@@ -11,9 +11,13 @@ const scratch = fs.mkdtempSync(path.resolve(project,'../preview-build/real-objec
 const assets = process.env.WHITEHOUND_REAL_ASSET_ROOT || 'C:\\Users\\Admin\\Desktop\\Overwatch Tool\\Datatool\\Widowmaker';
 const entity1P = path.join(assets,'Entities','Gameplay1P','Gameplay1P.owentity');
 const entity3P = path.join(assets,'Entities','Gameplay3P','Gameplay3P.owentity');
-const arms = path.join(assets,'animations','000000000156.owanimclip');
-const weapon = path.join(assets,'animations','000000003879.owanimclip');
-const body = path.join(assets,'animations','000000000231.owanimclip');
+function animation(name, model, group) {
+  const flat = path.join(assets, 'animations', name);
+  return fs.existsSync(flat) ? flat : path.join(assets, 'Models', model, 'Animations', '0', group, name);
+}
+const arms = animation('000000000156.owanimclip','00000000013E.00C','32');
+const weapon = animation('000000003879.owanimclip','0000000001D4.00C','4');
+const body = animation('000000000231.owanimclip','00000000011F.00C','32');
 function inventory(folder) {
   return fs.readdirSync(folder,{withFileTypes:true}).flatMap(entry => {
     const file=path.join(folder,entry.name);
@@ -50,6 +54,7 @@ const errors=[],exportRequests=[];
     && /^(Ready\.|Library restored)/.test(document.querySelector('#status-text').textContent));
   assert.equal(await page.title(),'Avolition');
   assert.equal(await page.locator('.inspector-panel #objects-menu').isVisible(),true);
+  await page.locator('#objects-menu > summary').click();
   assert.equal(await page.locator('#objects-button').count(),0);
   await page.evaluate(async()=>{
     const {PreviewViewport}=await import('./viewer.js');
@@ -116,6 +121,7 @@ const errors=[],exportRequests=[];
     assert.match(await page.locator('#match-message').innerText(),expectedMatch);
   };
   const assignments=()=>page.evaluate(()=>window.qaViewport.assignments.map(({modelId,clip})=>({modelId,path:clip.path})));
+  await page.locator('#clip-details > summary').click();
   const pov=await loaded(entity1P);
   const armsModel=pov.source.models.find(object=>object.name==='00000000013E.00C');
   const weaponModel=pov.source.models.find(object=>object.name==='0000000001D4.00C');

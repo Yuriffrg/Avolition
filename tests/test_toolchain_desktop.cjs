@@ -1,3 +1,4 @@
+const {openAnimationSetup} = require('./open-animation-setup.cjs');
 // Real packaged Electron + backend IPC, hidden QA window. Only native dialogs
 // and shell.openPath are intercepted; no release or DataTool results are faked.
 const {_electron} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -99,6 +100,7 @@ async function close() {
   await page.locator('.clip-row').filter({hasText:'001_Wave'}).dispatchEvent('click');
   await page.waitForFunction(()=>!document.querySelector('#timeline').disabled&&document.querySelector('#viewport-loading').hidden);
   await page.locator('#timeline').fill('17');
+  await openAnimationSetup(page);
   await page.locator('#animation-set-name').fill('PreviewRobot_native_tabs');
   await page.locator('#clip-search').fill('001_Wave');
   const before=await page.evaluate(()=>{

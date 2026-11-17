@@ -1,6 +1,7 @@
+const {openAnimationSetup} = require('./open-animation-setup.cjs');
 // Source renderer + real backend, parsers and persistent queue catalog.
-// Assets are generated fixtures. Only two successful native C4D responses are
-// simulated; the final failed run reaches the real disconnected bridge. This
+// Assets are generated fixtures. Successful file export and rig bridge responses
+// are simulated; the final failed run reaches the real disconnected bridge. This
 // test does not create a Cinema 4D document or contact the user's bridge.
 const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const {spawn, spawnSync} = require('node:child_process');
@@ -124,6 +125,7 @@ async function stopBackend() {
   };
   const closeDialog = () => page.locator('#close-export-menu').click();
   const choose = async (source, modelId) => {
+    await openAnimationSetup(page);
     await page.locator('#rig-select').selectOption(modelId);
     await page.locator('#clip-search').fill(path.basename(source, '.owanimclip'));
     await page.locator('.clip-row').first().click();
@@ -133,6 +135,7 @@ async function stopBackend() {
     if (await page.locator('#play-pause').getAttribute('aria-label') === 'Pause') await page.locator('#play-pause').click();
   };
   const add = async (name, count) => {
+    await openAnimationSetup(page);
     await page.locator('#animation-set-name').fill(name);
     await page.locator('#export-animation-set').click();
     await page.waitForFunction(() => !document.querySelector('#export-animation-set').disabled
@@ -166,9 +169,11 @@ async function stopBackend() {
   assert.equal(await page.locator('#animation-set-name').inputValue(), '', 'Loading an entity starts with a blank nickname.');
   assert.equal(await page.locator('#animation-set-name').getAttribute('placeholder'), 'Animation nickname');
   await choose(armsA, 'model-0');
+  await openAnimationSetup(page);
   await page.locator('#export-animation-set').click();
   assert.match(await page.locator('#animation-set-export-status').innerText(), /Enter a nickname/);
   assert.equal(saveRequests.length, 0, 'An empty nickname cannot create an export.');
+  await openAnimationSetup(page);
   await page.locator('#animation-set-name').fill('Reload'); await page.locator('#animation-set-name').blur();
   await pause(800);
   assert.equal(saveRequests.length, 0, 'Name changes and blur do not add or export a setup.');
@@ -188,11 +193,17 @@ async function stopBackend() {
   assert.equal(literalPrefix.motionClipName, 'Gameplay1P_Reload');
   assert.notEqual(literalPrefix.id, single.id, 'Distinct motion nicknames are not deduplicated solely by filename.');
   await openDialog();
+  const rigTab = page.getByRole('tab', {name:'Stager rig', exact:true});
+  const filesTab = page.getByRole('tab', {name:'Cinema export', exact:true});
+  assert.equal(await rigTab.getAttribute('aria-selected'), 'true');
+  assert.equal(await page.locator('#output-path').isVisible(), false);
+  assert.equal(await page.locator('#create-stager-rig').isVisible(), true);
+  assert.equal(await queueRow(single.id).locator('.export-queue-name').innerText(), 'Reload');
   await queueRow(literalPrefix.id).locator('.export-queue-remove').click();
   await page.waitForFunction(() => document.querySelectorAll('.export-queue-row').length === 1);
   assert.deepEqual(await getQueue(), [single], 'Removing a differently named motion snapshot keeps the original intact.');
   assert.equal(await selection(single.id).isChecked(), false);
-  assert.match(await queueRow(single.id).innerText(), /1 assigned animation · whole entity/);
+  assert.match(await queueRow(single.id).innerText(), /Gameplay1P\.owentity · 1 assigned animation/);
   assert.equal(await page.locator('#export-selected').isDisabled(), true);
   await closeDialog();
   await choose(gun, 'model-1');
@@ -203,6 +214,7 @@ async function stopBackend() {
     await new Promise(resolve=>{releaseRename=resolve;});
     await route.continue();
   }, {times:1});
+  if (!(await page.locator('#objects-list').isVisible())) await page.locator('#objects-menu > summary').click();
   const armsNode=page.locator('#objects-list [data-node-key="model:model-0"]');
   await armsNode.focus();await page.keyboard.press('F2');
   await page.locator('#objects-list .object-rename-input').fill('Arms 日本語');
@@ -237,6 +249,51 @@ async function stopBackend() {
   assert.equal(await selection(single.id).evaluate(check => document.activeElement === check), true,
     'Selecting an export with Space keeps keyboard focus on the same checkbox.');
   assert.equal(await page.locator('#export-queue-summary').innerText(), '1 of 3 selected');
+  const inserts = [];
+  let legacyFailure = true;
+  await page.route('**/api/stager_rig_destination', route => route.fulfill({json:{ok:true,data:{
+    instance:'test-instance',documentId:'doc-id',documentName:'Watchpoint test.c4d',motionTargetName:'Joints',
+    cameras:[{name:'POV Camera',id:'camera-id'}],rootMotionObjects:[{name:'Locomotion',id:'node-3'}],
+    existingRigs:{actor:{needsRepair:true}},
+  }}}));
+  await page.route('**/api/create_stager_rig', route => {
+    if (legacyFailure) {
+      legacyFailure = false;
+      return route.fulfill({json:{ok:false,error:'The registered rig or its Motion System target is missing. Restore it before importing.'}});
+    }
+    inserts.push(route.request().postDataJSON()[0]);
+    return route.fulfill({json:{ok:true,data:{repairedRegistration:true,warnings:['Test import warning']}}});
+  });
+  await page.locator('#create-stager-rig').click();
+  await page.waitForFunction(() => !document.querySelector('#stager-insert').disabled);
+  assert.equal(await page.locator('#stager-document').innerText(), 'Watchpoint test.c4d');
+  assert.equal(await page.locator('#stager-camera').inputValue(), 'camera-id');
+  assert.equal(await page.getByLabel('Input for Reload').inputValue(), 'KeyR');
+  await page.locator('#stager-kind').selectOption('actor');
+  assert.equal(await page.locator('#stager-target').innerText(), 'Joints');
+  assert.equal(await page.locator('#stager-insert').innerText(), 'Repair rig');
+  assert.equal(await page.locator('#stager-root-motion, #stager-root-label').count(), 0);
+  await page.getByLabel('Role for Reload').selectOption('idle');
+  await page.locator('#stager-insert').click();
+  await page.waitForFunction(() => document.querySelector('#stager-status').classList.contains('error'));
+  assert.match(await page.locator('#stager-status').innerText(), /restore it before importing.*C4D Bridge 0\.7\.14.*Stager 0\.19\.1/i);
+  await page.locator('#stager-insert').click();
+  await page.waitForFunction(() => !document.querySelector('#stager-rig-dialog').open);
+  assert.deepEqual(inserts, [{instance:'test-instance',documentId:'doc-id',kind:'actor',cameraId:'',
+    rootMotionId:'',actions:[{id:single.id,role:'idle',binding:'',edge:'press'}]}]);
+  assert.match(await page.locator('#export-queue-status').innerText(), /registration repaired in Watchpoint test\.c4d.*Refresh scene/);
+  assert.equal(await page.locator('#stager-warnings').isVisible(), true);
+  await rigTab.focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await filesTab.getAttribute('aria-selected'), 'true');
+  assert.equal(await filesTab.evaluate(tab => document.activeElement === tab), true);
+  assert.equal(await selection(single.id).isChecked(), true);
+  assert.equal(await queueRow(single.id).locator('.export-queue-name').innerText(), 'Gameplay1P_Reload.c4d');
+  assert.equal(await page.locator('#create-stager-rig').isVisible(), false);
+  assert.equal(await page.locator('#stager-warnings').isVisible(), false);
+  await page.keyboard.press('Home');
+  assert.equal(await page.locator('#stager-warnings').isVisible(), true);
+  await page.keyboard.press('End');
   assert.equal(await page.locator('#export-selected').isEnabled(), true);
   await page.locator('#output-path').fill(output); await page.locator('#output-path').blur();
   await page.waitForFunction(async expected => {const result = await window.pywebview.api.bootstrap();
@@ -259,6 +316,7 @@ async function stopBackend() {
   assert.deepEqual(await page.locator('.export-queue-check').evaluateAll(checks => checks.map(check => check.checked)), [false,false,false],
     'Restoring a queue does not silently opt saved entries into writing files.');
   assert.equal(await page.locator('#output-path').inputValue(), output);
+  await filesTab.click();
   assert.equal(await page.locator('#export-selected').isDisabled(), true);
   await selection(single.id).check(); await selection(changed.id).check();
   await page.locator('#export-selected').click();

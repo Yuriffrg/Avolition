@@ -116,31 +116,53 @@ function relatedOccurrences(clip, occurrences) {
 const validBinding = binding => binding && !binding.error && Array.isArray(binding.boneNames)
   && binding.boneNames.every(name => typeof name === 'string' && name.length > 0);
 
+// OW joint IDs and their names from owpreview/bone_names.py. A portable
+// full-body clip can drive the torso and both legs even on a facial-heavy
+// skeleton where those joints account for a small part of the total.
+const bodyRegions = [
+  ['bone_0002', 'bone_0003', 'bone_0004', 'bone_0005', 'bone_0053', 'Pelvis', 'Spine_1', 'Spine_2', 'Spine_3', 'Hips'],
+  ['bone_0055', 'bone_0059', 'bone_005A', 'Thigh_L', 'Knee_L', 'Foot_L'],
+  ['bone_005F', 'bone_0063', 'bone_0064', 'Thigh_R', 'Knee_R', 'Foot_R'],
+];
+
+function bodyMismatch(context, sources, names, matched, coverage) {
+  if (context.perspective !== 'Gameplay3P') return '';
+  if (!matched) return 'No clip joints match this body.';
+  if (coverage >= 0.5) return '';
+  const modelSource = context.modelFolder && sources.some(source => source.modelGuid === context.modelGuid);
+  if (modelSource) return ''; // Keep partial actions authored for this model.
+  if (matched < names.size / 4) return 'Fewer than a quarter of the clip’s joints match this body.';
+  // Loose clips have no declared model. Sparse bindings alone cannot identify
+  // an incompatible rig. Apply the stronger rule only with folder evidence.
+  if (!context.modelFolder || !sources.length) return '';
+  const drivesBody = bodyRegions.every(region => region.some(name => names.has(name) && context.boneNames.has(name)));
+  return drivesBody ? '' : 'This clip comes from another model and has limited coverage of this body.';
+}
+
 export function matchClip(clip, context, allOccurrences = [], durationReference = null) {
   const related = relatedOccurrences(clip, allOccurrences);
-  const sameModelFolder = Boolean(context?.modelFolder && related.some(row => {
-    const source = modelPathParts(row.path);
-    return source && source.modelFolder === context.modelFolder && source.exportRoot === context.exportRoot
-      && source.modelGuid === context.modelGuid && source.remainder[0] === 'animations';
-  }));
+  const sources = related.map(row => modelPathParts(row.path)).filter(source => source?.remainder[0] === 'animations');
+  const sameModelFolder = Boolean(context?.modelFolder && sources.some(source => source.modelFolder === context.modelFolder));
   const binding = !clip?.error && related.find(row => validBinding(row?.binding))?.binding;
   const trackCount = validCount(clip?.boneCount) ? clip.boneCount : binding ? new Set(binding.boneNames).size : null;
   const score = {name:String(clip?.name || basename(clip?.path)), path:String(clip?.path || ''),
     known:false, matched:null, totalBoneCount:context?.totalBoneCount || 0, trackCount,
-    extraTracks:null, coverage:null, sameModelFolder, sourceRank:Number(sameModelFolder),
+    extraTracks:null, coverage:null, mismatchReason:'', sameModelFolder, sourceRank:Number(sameModelFolder),
     durationMatch:matchesDuration(clip, durationReference),
     error:clip?.error || clip?.binding?.error || null};
   if (!context?.boneNames?.size || !binding) return score;
   const names = new Set(binding.boneNames);
   let matched = 0;
   for (const name of context.boneNames) if (names.has(name)) matched++;
-  return {...score, known:true, matched, extraTracks:Math.max(0, trackCount - matched),
-    coverage:matched / context.totalBoneCount, error:null};
+  const coverage = matched / context.totalBoneCount;
+  return {...score, known:true, matched, extraTracks:Math.max(0, trackCount - matched), coverage,
+    mismatchReason:bodyMismatch(context, sources, names, matched, coverage), error:null};
 }
 
 // Scores can be cached once per render, keeping sort comparisons constant time.
 export function compareMatchScores(a, b) {
   return Number(Boolean(b?.known)) - Number(Boolean(a?.known))
+    || Number(Boolean(a?.mismatchReason)) - Number(Boolean(b?.mismatchReason))
     || Number(b?.sourceRank || 0) - Number(a?.sourceRank || 0)
     || (a?.known && b?.known ? b.matched - a.matched || a.extraTracks - b.extraTracks : 0)
     || Number(Boolean(b?.durationMatch)) - Number(Boolean(a?.durationMatch))

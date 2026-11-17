@@ -68,6 +68,7 @@ const assert = require('node:assert/strict');
   await page.locator('#play-pause').click();
   await page.locator('#timeline').fill('30');
   assert.equal(await page.locator('#frame-input').inputValue(), '30');
+  await page.locator('#viewport-settings > summary').click();
   await page.locator('#lock-root').check();
   await page.locator('#clip-name').fill('Friendly wave');
   // Pausing during typing saves metadata but must not create partial filenames.
@@ -92,6 +93,7 @@ const assert = require('node:assert/strict');
   await page.locator('#clip-search').fill('Friendly wave');
   assert.equal(await page.locator('.clip-row').count(), 1);
   await page.locator('#clip-search').fill('');
+  await page.locator('#library-filters > summary').click();
   await page.locator('#clip-sort').selectOption('name');
   assert.equal(await page.locator('.clip-name').first().innerText(), '002_Turn');
   // Named clips stay together, alphabetized by nickname. Empty and whitespace
@@ -164,23 +166,30 @@ const assert = require('node:assert/strict');
   assert.ok(deformation.restError < 1e-5, JSON.stringify(deformation));
   assert.ok(deformation.animatedDistance > 0.1, JSON.stringify(deformation));
   assert.ok(deformation.resetError < 1e-5, JSON.stringify(deformation));
-  const radius = () => page.evaluate(() => window.__motionTestView.camera.position.distanceTo(window.__motionTestView.controls.target));
-  const before = await radius();
+  const radius = () => page.evaluate(() => {
+    const view=window.__motionTestView;
+    return view.camera.position.distanceTo(view.pivotNavigation?.pivot || view.controls.target);
+  });
+  const pivotNavigation = await page.evaluate(() => Boolean(window.__motionTestView.pivotNavigation));
   const nav = await page.locator('#test-nav-canvas').boundingBox();
   await page.mouse.move(nav.x+100, nav.y+100);
   await page.keyboard.down('Alt');
   await page.mouse.down({button:'right'});
+  const beforeVertical = await radius();
   await page.mouse.move(nav.x+100, nav.y+180, {steps:5});
   await page.mouse.up({button:'right'});
-  assert.ok(Math.abs(await radius()-before)<1e-6, 'Vertical Alt+RMB must not zoom');
+  assert.ok(pivotNavigation ? await radius()>beforeVertical : Math.abs(await radius()-beforeVertical)<1e-6,
+    'Stager pivot navigation uses vertical dolly, while historical controls use horizontal dolly.');
   await page.mouse.move(nav.x+100, nav.y+100);
   await page.mouse.down({button:'right'});
+  const beforeHorizontal = await radius();
   await page.mouse.move(nav.x+180, nav.y+100, {steps:5});
   await page.mouse.up({button:'right'});
   await page.keyboard.up('Alt');
-  assert.ok(await radius()<before, 'Horizontal Alt+RMB must zoom in');
+  assert.ok(await radius()<beforeHorizontal, 'Horizontal Alt+RMB must zoom in');
   await page.evaluate(() => {
     const view=window.__motionTestView;
+    view.pivotNavigation?.dispose();
     view.renderer.setAnimationLoop(null); view._clear(); view.controls.dispose(); view.renderer.dispose(); view.resizeObserver.disconnect(); view.canvas.parentElement.remove();
     delete window.__motionTestView;
   });
@@ -193,6 +202,7 @@ const assert = require('node:assert/strict');
   assert.equal(await page.locator('#output-path').inputValue(), outputFolder);
   await page.locator('#scan-root').click();
   await page.waitForFunction(() => document.querySelector('#clip-count').textContent === '3');
+  await page.locator('#library-filters > summary').click();
   await page.locator('#clip-sort').selectOption('nicknamed-first');
   assert.equal(await page.locator('.clip-name').first().innerText(), 'Friendly wave');
   assert.equal(await page.locator('.clip-row').filter({hasText: 'Friendly wave'}).count(), 1);

@@ -1,3 +1,4 @@
+const {openAnimationSetup} = require('./open-animation-setup.cjs');
 // Packaged-application QA. --no-sandbox is solely a restricted-test-host flag;
 // production BrowserWindow preferences and normal Avolition launches stay sandboxed.
 const {_electron} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -77,7 +78,7 @@ async function launch() {
   assert.equal(native.nodeIntegration, false);
   assert.equal(await page.title(), 'Avolition');
   assert.equal(await page.locator('#app-logo, .avolition-empty-logo, .empty-note').count(), 0);
-  assert.equal(await page.locator('.local-badge .version').innerText(), 'v0.8.29');
+  assert.equal(await page.locator('.local-badge .version').innerText(), 'v0.8.35');
   assert.equal(await page.locator('#clip-notes').count(), 0);
   assert.equal(await page.locator('#export-fbx, #fbx-up-axis').count(), 0);
   assert.equal(await page.locator('#clip-name, #export-clip, #export-c4d, #track-groups, #track-count-filter').count(), 0);
@@ -126,6 +127,7 @@ async function closeNative() {
   await page.locator('#close-export-menu').dispatchEvent('click');
   assert.equal(await page.locator('#objects-button, #objects-menu[popover]').count(), 0);
   assert.equal(await page.locator('.inspector-panel #objects-menu').isVisible(), true);
+  await page.locator('#objects-menu > summary').click();
   assert.equal(await page.locator('#objects-list [data-kind="model"]').count(), 0);
   assert.equal(await page.locator('#favorite-clip, #favorites-filter, .clip-favorite').count(), 0);
   report.queueDefaults = {empty:true, accessibleWithoutEntity:true, exportDisabledWithoutSelection:true};
@@ -136,6 +138,7 @@ async function closeNative() {
   await picker('#browse-root', assets);
   await page.waitForFunction(() => document.querySelector('#clip-count').textContent === '3');
   assert.equal(await page.locator('.clip-row').count(), 3);
+  await page.locator('#library-filters > summary').click();
   await page.locator('#hide-duplicates').uncheck();
   assert.equal(await page.locator('.clip-row').count(), 4);
   await page.locator('#hide-duplicates').check();
@@ -143,6 +146,7 @@ async function closeNative() {
   report.duplicateFiltering = {defaultOn:true, uniqueClips:3, sourceFiles:4, toggled:true};
   assert.equal(await page.locator('#root-path').inputValue(), assets);
   await page.locator('#fbx-options-button').dispatchEvent('click');
+  await page.locator('#export-files-tab').click();
   await picker('#browse-output', output);
   await until(async () => await page.locator('#output-path').inputValue() === output, 'Native output picker');
   await page.locator('#close-export-menu').dispatchEvent('click');
@@ -178,6 +182,7 @@ async function closeNative() {
   assert.equal(await page.locator('#objects-summary').innerText(), `0 of ${meshCount} meshes shown`);
   await page.locator('#objects-show-all').dispatchEvent('click');
   assert.equal(await page.locator('#polygon-count').innerText(), 'Polygons: 168');
+  await page.locator('#clip-details > summary').click();
   // A hidden weapon/submesh must remain hidden while choosing other clips.
   await meshes.first().dispatchEvent('click');
   assert.equal(await page.locator('#objects-menu').isVisible(), true);
@@ -200,6 +205,7 @@ async function closeNative() {
   assert.equal(await page.locator('#polygon-count').innerText(), 'Polygons: 168');
   report.objectVisibility = {meshCount, independentMeshes:true, hideAll:true, showAll:true, retainedAcrossClips:true};
   if (process.env.WHITEHOUND_FULL_DESKTOP === '1') {
+  await page.locator('#viewport-settings > summary').click();
   await page.locator('#show-wireframe').check();
   await page.locator('#show-wireframe').uncheck();
   // Optional full viewport regression; hidden compositor input can be limited.
@@ -281,11 +287,12 @@ async function closeNative() {
   await page.locator('#output-path').press('Enter');
   await page.waitForFunction(() => document.querySelector('#output-help').hidden);
   assert.equal(await page.locator('#fbx-root-motion').isChecked(), true);
-  await page.locator('.export-menu-settings > summary').dispatchEvent('click');
+  await page.locator('#export-files-panel .export-menu-settings > summary').dispatchEvent('click');
   await page.locator('#fbx-textures').dispatchEvent('click');
   assert.equal(await page.locator('#fbx-textures').isChecked(), false);
   await page.locator('#close-export-menu').dispatchEvent('click');
 
+  await openAnimationSetup(page);
   await page.locator('#animation-set-name').fill('bad/name');
   await page.locator('#export-animation-set').dispatchEvent('click');
   await page.waitForFunction(() => document.querySelector('#animation-set-export-status').textContent.startsWith('Not added:'));
@@ -305,6 +312,7 @@ async function closeNative() {
     await page.locator(selector).dispatchEvent('click');
     assert.equal(await page.locator(selector).isChecked(), true);
   }
+  await openAnimationSetup(page);
   await page.locator('#animation-set-name').fill(nickname);
   await page.locator('#export-animation-set').dispatchEvent('click');
   await page.waitForFunction(() => document.querySelector('#animation-set-export-status').textContent.startsWith('Added to'));
@@ -322,7 +330,7 @@ async function closeNative() {
   assert.equal(await page.locator('.export-queue-check').isChecked(), false);
   assert.equal(await page.locator('#export-selected').isDisabled(), true);
   assert.equal(await page.locator('.export-queue-name').innerText(), queueName+'.c4d');
-  assert.match(await page.locator('.export-queue-assignment').innerText(), /1 assigned animation.*whole entity/);
+  assert.match(await page.locator('.export-queue-assignment').innerText(), /1 assigned animation/);
   await page.locator('.export-queue-check').dispatchEvent('click');
   assert.equal(await page.locator('#export-selected').isEnabled(), true);
   if (process.env.WHITEHOUND_CAPTURE_HIDDEN === '1') {
@@ -331,6 +339,7 @@ async function closeNative() {
   }
   await page.locator('#close-export-menu').dispatchEvent('click');
   // Closing with a draft in the new name field must not add or export it.
+  await openAnimationSetup(page);
   await page.locator('#animation-set-name').fill('Unadded draft 日本語');
   assert.equal(await page.evaluate(() => document.activeElement.id), 'animation-set-name');
   await closeNative();
@@ -354,6 +363,7 @@ async function closeNative() {
   assert.equal(await page.locator('#output-path').inputValue(), output);
   assert.equal(await page.locator('#clip-sort').inputValue(), 'nicknamed-first');
   await page.locator('#fbx-options-button').dispatchEvent('click');
+  await page.locator('#export-files-tab').click();
   assert.equal(await page.locator('#export-queue-list .export-queue-row').count(), 1);
   assert.equal(await page.locator('.export-queue-name').innerText(), queueName+'.c4d');
   assert.equal(await page.locator('.export-queue-check').isChecked(), false, 'Queue selection is session-only and restores unchecked.');
@@ -364,6 +374,7 @@ async function closeNative() {
   await page.locator('#close-export-menu').dispatchEvent('click');
   await page.locator('#scan-root').dispatchEvent('click');
   await page.waitForFunction(() => document.querySelector('#clip-count').textContent==='3');
+  await page.locator('#library-filters > summary').click();
   await page.locator('#clip-sort').selectOption('nicknamed-first');
   assert.equal(await page.locator('.clip-name').first().innerText(), nickname);
   await page.locator('#clip-search').fill(nickname);

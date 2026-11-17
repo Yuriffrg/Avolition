@@ -1,5 +1,6 @@
 import { PreviewViewport } from './viewer.js';
 import { ObjectVisibilityMenu } from './object-menu.js';
+import { createOriginProbe } from './clip-origin.js';
 import { visibleClips } from './library-clips.js';
 import { modelContext, matchClip, compareMatchScores, indexOccurrences, assignmentDurationReference } from './clip-matching.js';
 import { createExportQueue } from './export-queue.js';
@@ -25,6 +26,7 @@ const state = {
   assignments: new Map(), activeModelId: '', clipLoadPromise: null,
   queueAddPromise: null,
   matchModels: [], matchContext: null, matchScores: new Map(), occurrences: new Map(),
+  originProbe: null, originResults: new WeakMap(),
   bindingRequest: 0, bindingJob: null, bindingProgress: null,
   librarySettingsChain: Promise.resolve(), librarySettingsError: '',
 };
@@ -147,7 +149,10 @@ function updateMatchingStatus() {
 
 function startLibraryMatching() {
   if (state.bindingJob || !state.entityLoaded || state.closing || state.closed) return;
-  const pending = state.clips.filter(clip => !clip.error && !clip.binding);
+  // Showing every clip still ranks unlikely matches and explains them on hover.
+  const probe = state.originProbe;
+  const pending = state.clips.filter(clip => !clip.error && (!clip.binding || (probe && !state.originResults.has(clip))));
+  const readBindings = paths => probe ? api('read_clip_bindings', paths, probe.names) : api('read_clip_bindings', paths);
   if (!pending.length) { updateMatchingStatus(); return; }
   const token = state.bindingRequest;
   const grouped = new Map();
@@ -163,7 +168,7 @@ function startLibraryMatching() {
       for (let offset = 0; offset < groups.length; offset += 128) {
         if (token !== state.bindingRequest || state.closing || state.closed) return;
         const batch = groups.slice(offset, offset + 128);
-        const result = await api('read_clip_bindings', batch.map(group => group[0].path));
+        const result = await readBindings(batch.map(group => group[0].path));
         if (token !== state.bindingRequest || state.closing || state.closed) return;
         const byPath = new Map((result.clips || []).map(item => [item.path,item]));
         for (const group of batch) {
@@ -171,11 +176,16 @@ function startLibraryMatching() {
           // A source copy can disappear after scanning. An identical accessible
           // copy can still supply its bones without hiding the original path.
           if (!Array.isArray(binding.boneNames) && group.length > 1) {
-            const fallback = await api('read_clip_bindings', [group[1].path]);
+            const fallback = await readBindings([group[1].path]);
             if (token !== state.bindingRequest || state.closing || state.closed) return;
             if (Array.isArray(fallback.clips?.[0]?.boneNames)) binding = fallback.clips[0];
           }
-          for (const clip of group) clip.binding = binding;
+          const hidden = probe?.matches(binding.firstPose);
+          const metadata = {boneNames:binding.boneNames, error:binding.error};
+          for (const clip of group) {
+            clip.binding = Array.isArray(metadata.boneNames) ? metadata : clip.binding || metadata;
+            if (probe) state.originResults.set(clip, hidden);
+          }
           state.bindingProgress.done += group.length;
         }
         updateMatchingStatus();
@@ -195,7 +205,8 @@ function startLibraryMatching() {
 }
 
 function saveLibraryOptions() {
-  const changes = {sort:$('clip-sort').value, hideDuplicates:$('hide-duplicates').checked};
+  const changes = {sort:$('clip-sort').value, hideDuplicates:$('hide-duplicates').checked,
+    hideOriginPoses:$('hide-origin-poses').checked};
   state.librarySettingsChain = state.librarySettingsChain.catch(() => {}).then(async () => {
     try { await api('library_settings', changes); state.librarySettingsError = ''; }
     catch (error) { state.librarySettingsError = error.message || String(error); setStatus(`Library preferences not saved: ${state.librarySettingsError}`, 'error'); }
@@ -205,12 +216,22 @@ function saveLibraryOptions() {
 function renderLibrary({ reveal = false } = {}) {
   const query = $('clip-search').value.trim().toLocaleLowerCase();
   const sort = $('clip-sort').value;
+  const context = libraryContext(); state.matchContext = context;
+  const modelFilter = $('hide-origin-poses');
+  modelFilter.disabled = context?.perspective !== 'Gameplay3P';
   const matching = visibleClips(state.clips, {query, hideDuplicates:$('hide-duplicates').checked,
     selectedPath:state.selectedPath, entityPath:state.loadedEntityPath});
-  const context = libraryContext(); state.matchContext = context;
   const durationReference = libraryDurationReference();
-  state.filtered = matching;
-  state.matchScores = new Map(context ? state.filtered.map(clip => [clip.path,matchClip(clip,context,state.occurrences,durationReference)]) : []);
+  state.matchScores = new Map();
+  if (context) for (const clip of matching) {
+    const score = matchClip(clip, context, state.occurrences, durationReference);
+    if (!modelFilter.disabled && state.originProbe?.modelId === context.modelId && state.originResults.get(clip))
+      score.mismatchReason = 'The head or camera starts within 5 cm of this body’s origin.';
+    state.matchScores.set(clip.path, score);
+  }
+  state.filtered = modelFilter.checked && !modelFilter.disabled
+    ? matching.filter(clip => !state.matchScores.get(clip.path).mismatchReason) : matching;
+  const hiddenMismatches = matching.length - state.filtered.length;
   updateLibraryObjectControl(); updateMatchingStatus();
   state.filtered.sort((a, b) => {
     let compared = 0;
@@ -266,6 +287,7 @@ function renderLibrary({ reveal = false } = {}) {
     row.append(main, numbers);
     if (context) {
       const score = state.matchScores.get(clip.path);
+      if (score.mismatchReason) row.title += `\nUnlikely body match: ${score.mismatchReason}`;
       if (score.durationMatch) row.title += `\nDuration matches ${clipName(durationReference.clip)} on another object (within one frame).`;
       const coverage = document.createElement('span'); coverage.className = 'clip-coverage';
       const label = document.createElement('span'); label.className = 'clip-coverage-label';
@@ -276,6 +298,7 @@ function renderLibrary({ reveal = false } = {}) {
         const fill = document.createElement('span'); fill.className = 'clip-coverage-fill'; fill.style.width = `${Math.max(0,Math.min(1,score.coverage))*100}%`;
         track.append(fill); coverage.append(label,track);
         coverage.title = `${score.matched} of ${score.trackCount} clip tracks match; ${score.extraTracks} unmatched.${score.sameModelFolder ? ' This clip or an identical copy is in the selected model’s animation folder.' : ''} Coverage is not a guarantee of the correct motion.`;
+        if (score.mismatchReason) coverage.title += ' ' + score.mismatchReason;
         row.setAttribute('aria-label', `${row.getAttribute('aria-label')}, ${label.textContent}`);
       } else { coverage.append(label); coverage.title = score.error || 'Bone track metadata is being read.'; }
       row.append(coverage);
@@ -292,7 +315,7 @@ function renderLibrary({ reveal = false } = {}) {
   const emptyDescription = $('library-empty').querySelector('p');
   if (state.clips.length && !state.filtered.length) {
     emptyTitle.textContent = 'No matching animations';
-    emptyDescription.textContent = 'Try another filename or nickname, or select All track counts.';
+    emptyDescription.textContent = hiddenMismatches ? 'Uncheck Hide unlikely matches to show these clips.' : 'Try another filename or nickname.';
   } else if (state.root) {
     emptyTitle.textContent = 'No animation clips found';
     emptyDescription.textContent = 'Choose an export folder containing .owanimclip files. All subfolders are included.';
@@ -306,6 +329,7 @@ function renderLibrary({ reveal = false } = {}) {
   $('library-summary').textContent = state.root
     ? `${state.filtered.length.toLocaleString()} clips${$('hide-duplicates').checked && state.clips.length > unique ? ` · ${(state.clips.length-unique).toLocaleString()} duplicates hidden` : ` of ${state.clips.length.toLocaleString()}`}`
     : 'No folder scanned';
+  if (hiddenMismatches) $('library-summary').textContent += ` · ${hiddenMismatches.toLocaleString()} unlikely ${hiddenMismatches === 1 ? 'match' : 'matches'} hidden`;
   $('prev-clip').disabled = state.filtered.length < 1;
   $('next-clip').disabled = state.filtered.length < 1;
   if (reveal) state.rows.get(state.selectedPath)?.scrollIntoView({ block: 'nearest' });
@@ -352,10 +376,15 @@ function renderEntities() {
   for (const entity of state.entities) {
     const option = document.createElement('option');
     option.value = entity.path;
-    option.textContent = entity.relativePath || entity.name || sourceName(entity.path);
+    const name = sourceName(entity.path);
+    const relative = entity.relativePath || '';
+    const folder = relative.slice(0, Math.max(relative.lastIndexOf('/'), relative.lastIndexOf('\\'), 0));
+    option.textContent = folder ? `${name}  ·  ${folder}` : name;
+    option.title = entity.path;
     select.append(option);
   }
   if (state.entities.some((item) => item.path === previous)) select.value = previous;
+  select.title = select.value;
   $('load-entity').disabled = !select.value || !state.ready || !viewport;
   $('browse-models').disabled = !state.ready || !state.entities.length;
   modelBrowser?.setEntries(state.entities);
@@ -466,6 +495,9 @@ async function loadEntity(path) {
   flushAnnotation(state.selectedPath);
   const request = ++state.entityRequest;
   const entityRoot = state.root;
+  state.bindingRequest++;
+  state.bindingJob = null; state.bindingProgress = null;
+  state.originProbe = null; state.originResults = new WeakMap();
   state.clipRequest++;
   state.entityLoaded = false;
   state.loadedEntityPath = '';
@@ -501,6 +533,7 @@ async function loadEntity(path) {
     state.loadedEntityPath = path;
     state.loadedEntityRoot = entityRoot;
     state.matchModels = asset.models || [];
+    state.originProbe = createOriginProbe(path, state.matchModels.find(model => !model.parentId && model.bones?.length));
     objectMenu.setSceneName(sourceName(path).replace(/\.(owentity|owmdl)$/i, ''), path);
     objectMenu.setNames(asset.objectNames || {});
     $('animation-set-name').value = '';
@@ -568,8 +601,8 @@ function updateObjectControls() {
   objectMenu.setActiveModel(state.activeModelId, summaries);
   $('clear-object-animation').disabled = !state.assignments.has(state.activeModelId);
   $('object-animation-status').textContent = model
-    ? `Click a library clip to change this object's animation. ${state.assignments.size} assigned; other objects keep their clips.`
-    : 'Choose an object, then browse animations. Each object keeps its own clip.';
+    ? 'Choose a library clip to assign to this object.'
+    : 'Load a model to assign its animation clips.';
   renderAnimationSet();
   updateLibraryObjectControl();
 }
@@ -577,6 +610,8 @@ function updateObjectControls() {
 function renderAnimationSet() {
   const list = $('animation-set');
   const visible = state.entityLoaded && state.assignments.size > 0;
+  $('setup-count').hidden = !visible;
+  $('setup-count').textContent = String(state.assignments.size);
   list.hidden = !visible;
   $('animation-set-export-controls').hidden = !visible;
   list.replaceChildren();
@@ -1004,6 +1039,7 @@ function prepareClose() {
     setStatus(error, 'busy');
     return Promise.resolve({ok:false, busy:true, error});
   }
+  if ($('stager-rig-dialog').open) $('stager-rig-dialog').close();
   state.closing = true;
   modelBrowser?.close();
   setPlaying(false);
@@ -1094,7 +1130,6 @@ function updateMaterialStatus(pending = '') {
   $('pov-status').hidden = !$('pov-camera').checked;
   $('pov-status').textContent = pov?.active ? 'POV cam follows the animated Camera joint.'
     : 'POV cam needs an entity with a Camera joint, such as Gameplay1P arms.';
-  $('viewport').parentElement.querySelector('.navigation-hint').hidden = Boolean(pov?.active);
   const stats = state.materialStats;
   const enabled = $('show-textures').checked;
   const count = stats?.texturedMeshes || 0;
@@ -1119,6 +1154,7 @@ async function connect() {
     const data = await api('bootstrap');
     $('clip-sort').value = data?.libraryOptions?.sort || 'object-match';
     $('hide-duplicates').checked = data?.libraryOptions?.hideDuplicates !== false;
+    $('hide-origin-poses').checked = data?.libraryOptions?.hideOriginPoses !== false;
     mapsUI = initMaps(api, data, {sameDirectory});
     toolchainUI = initToolchain(api, {
       async refreshLibrary(root) {await refreshToolchainLibrary(root);await mapsUI.refreshLibrary(root);},
@@ -1161,6 +1197,7 @@ modelBrowser = createModelBrowser({
   async onLoad(path) {
     if (state.closing || state.closed) return;
     $('entity-select').value = path;
+    $('entity-select').title = path;
     if (!await loadEntity(path)) throw new Error($('status-text').textContent || 'The model could not be loaded.');
   },
 });
@@ -1173,7 +1210,10 @@ $('output-path').addEventListener('input', () => { state.outputRevision++; outpu
 $('output-path').addEventListener('blur', saveOutputFolder);
 $('output-path').addEventListener('keydown', (event) => { if (event.key === 'Enter') { saveOutputFolder(); $('output-path').blur(); } });
 $('root-path').addEventListener('keydown', (event) => { if (event.key === 'Enter') scanRoot(); });
-$('entity-select').addEventListener('change', () => { $('load-entity').disabled = !state.ready || !viewport || !$('entity-select').value; });
+$('entity-select').addEventListener('change', ({target}) => {
+  target.title = target.value;
+  $('load-entity').disabled = !state.ready || !viewport || !target.value;
+});
 $('load-entity').addEventListener('click', () => loadEntity($('entity-select').value));
 $('browse-models').addEventListener('click', () => modelBrowser.open($('entity-select').value));
 $('clip-search').addEventListener('input', () => renderLibrary());
@@ -1197,6 +1237,10 @@ $('library-object').addEventListener('change', () => selectObject($('library-obj
 $('clear-object-animation').addEventListener('click', clearObjectAnimation);
 $('export-animation-set').addEventListener('click', addAnimationSet);
 $('animation-set-name').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); addAnimationSet(); } });
+$('hide-origin-poses').addEventListener('change', () => {
+  renderLibrary({reveal:true});
+  saveLibraryOptions();
+});
 $('hide-duplicates').addEventListener('change', () => { renderLibrary({reveal:true}); saveLibraryOptions(); });
 
 document.addEventListener('keydown', (event) => {
@@ -1204,7 +1248,7 @@ document.addEventListener('keydown', (event) => {
   if (modelBrowser?.isOpen()) return;
   if (event.defaultPrevented || event.target.closest('[role=tab]')) return;
   if (document.getElementById('workflow-animations')?.hidden) return;
-  if (event.target.closest('input,textarea,select,[contenteditable=true],#fbx-options-button,#export-menu,#objects-menu,#objects-button,#clear-object-animation,#animation-set,#animation-set-export-controls') || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.target.closest('input,textarea,select,summary,[contenteditable=true],#fbx-options-button,#export-menu,#objects-menu,#objects-button,#clear-object-animation,#animation-set,#animation-set-export-controls') || event.altKey || event.ctrlKey || event.metaKey) return;
   if (event.code === 'Space') { event.preventDefault(); if (!event.repeat) togglePlaying(); }
   else if (event.key === 'ArrowLeft') { event.preventDefault(); setPlaying(false); seek(Math.ceil(state.frame) - 1); }
   else if (event.key === 'ArrowRight') { event.preventDefault(); setPlaying(false); seek(Math.floor(state.frame) + 1); }

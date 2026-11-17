@@ -7,6 +7,10 @@
   <title>Avolition</title>
   <link rel="icon" href="./assets/avolition.ico">
   <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./workspace-sidebars.css">
+  <link rel="stylesheet" href="./workspace-setup.css">
+  <link rel="stylesheet" href="./workspace-transport.css">
+  <link rel="stylesheet" href="./export-studio.css">
 </head>
 <body>
   <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -28,7 +32,7 @@
         <button id="tab-maps" type="button" role="tab" aria-selected="false" aria-controls="workflow-maps" data-workflow="maps" tabindex="-1">Maps</button>
         <button id="tab-toolchain" type="button" role="tab" aria-selected="false" aria-controls="workflow-toolchain" data-workflow="toolchain" tabindex="-1">Toolchain</button>
       </nav>
-      <div class="header-actions"><div class="local-badge"><span class="status-dot"></span>LOCAL PREVIEW <span class="version">v0.8.29</span></div><button id="close-app" class="button secondary small" hidden>Close app</button></div>
+      <div class="header-actions"><div class="local-badge"><span class="status-dot"></span>LOCAL PREVIEW <span class="version">v0.8.35</span></div><button id="close-app" class="button secondary small" hidden>Close app</button></div>
     </header>
 
     <section id="toolchain-directories" class="workflow-directories" aria-label="Toolchain export directories" hidden>
@@ -45,21 +49,29 @@
     </section>
 
     <section id="workflow-animations" class="workflow-panel animation-workflow" role="tabpanel" aria-labelledby="tab-animations">
-    <section class="source-bar" aria-label="Export source">
-      <div class="root-control"><label for="root-path">LIBRARY SOURCE</label><div class="input-with-icon"><svg class="icon"><use href="#i-folder"/></svg><input id="root-path" type="text" spellcheck="false" placeholder="Paste the full path to your exported Overwatch folder" autocomplete="off" aria-describedby="root-help"></div></div>
-      <button id="browse-root" class="button secondary">Browse…</button>
-      <button id="scan-root" class="button primary">Scan folder <span aria-hidden="true">↗</span></button>
-      <p id="root-help" class="source-help">Scans character models and animations in subfolders. Map exports are excluded.</p>
-    </section>
 
+      <section class="source-bar" aria-label="Animation library source">
+        <div class="root-control"><label for="root-path">Library source</label><div class="input-with-icon"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><input id="root-path" type="text" spellcheck="false" placeholder="Paste the full path to your exported Overwatch folder" autocomplete="off" aria-describedby="root-help" title="Scans character models and animations in subfolders. Map exports are excluded."></div></div>
+        <button id="browse-root" class="button secondary">Browse…</button>
+        <button id="scan-root" class="button primary">Scan folder <span aria-hidden="true">↗</span></button>
+        <p id="root-help" class="source-help">Scans character models and animations in subfolders. Map exports are excluded.</p>
+      </section>
     <main class="workspace">
       <aside class="library-panel">
         <div class="panel-heading"><h2>Animation library</h2><span id="clip-count" class="count">0</span></div>
-        <label class="duplicates-toggle"><input id="hide-duplicates" type="checkbox" checked><span>Hide duplicates</span></label>
-        <div class="library-object-control"><label for="library-object">For selected object</label><select id="library-object" aria-describedby="library-match-status" disabled><option value="">Load an entity to select an object</option></select><p id="library-match-status" role="status" aria-live="polite" aria-atomic="true">Load an object to compare its bones.</p></div>
-        <div class="library-search-control" role="group" aria-label="Search and sort animations">
-          <div class="search-box"><svg class="icon"><use href="#i-search"/></svg><input id="clip-search" type="search" placeholder="Search filename or nickname" aria-label="Search animations" autocomplete="off"></div>
-          <div class="library-toolbar"><select id="clip-sort" aria-label="Sort animations"><option value="object-match" selected>For selected object</option><option value="tracks-desc">Most tracks first</option><option value="nicknamed-first">Nicknamed first</option><optgroup label="More sorting options"><option value="name">Name A–Z</option><option value="tracks-asc">Fewest tracks first</option><option value="size-desc">Largest first</option><option value="size-asc">Smallest first</option><option value="duration-desc">Longest first</option><option value="duration-asc">Shortest first</option></optgroup></select></div>
+        <div class="library-search-control clip-finder" role="group" aria-label="Search and filter animations">
+          <div class="search-box"><svg class="icon"><use href="#i-search"/></svg><input id="clip-search" type="search" placeholder="Search clips" aria-label="Search animations" title="Search by filename or nickname" autocomplete="off"></div>
+          <details id="library-filters" class="rail-disclosure">
+            <summary title="Filter and sort animations">Filters</summary>
+            <div class="clip-filter-fields">
+              <div class="library-toggles">
+                <label class="duplicates-toggle"><input id="hide-duplicates" type="checkbox" checked><span>Hide duplicates</span></label>
+                <label class="duplicates-toggle" title="Hide likely mismatches for the selected Gameplay3P body using the source model, shared joints and first-frame head or camera position."><input id="hide-origin-poses" type="checkbox" checked disabled><span>Hide unlikely matches</span></label>
+              </div>
+              <div class="library-object-control"><label for="library-object">For selected object</label><select id="library-object" aria-describedby="library-match-status" disabled><option value="">Load an entity to select an object</option></select><p id="library-match-status" role="status" aria-live="polite" aria-atomic="true">Load an object to compare its bones.</p></div>
+              <div class="library-toolbar"><label for="clip-sort">Sort by</label><select id="clip-sort" aria-label="Sort animations"><option value="object-match" selected>For selected object</option><option value="tracks-desc">Most tracks first</option><option value="nicknamed-first">Nicknamed first</option><optgroup label="More sorting options"><option value="name">Name A–Z</option><option value="tracks-asc">Fewest tracks first</option><option value="size-desc">Largest first</option><option value="size-asc">Smallest first</option><option value="duration-desc">Longest first</option><option value="duration-asc">Shortest first</option></optgroup></select></div>
+            </div>
+          </details>
         </div>
         <div class="library-columns" aria-hidden="true"><span>CLIP</span><span>DURATION / SIZE</span></div>
         <div id="clip-list" class="clip-list" role="list" aria-label="Animations"></div>
@@ -68,55 +80,76 @@
       </aside>
 
       <section class="preview-panel" aria-label="3D animation preview">
-        <div class="entity-toolbar"><label for="entity-select">ENTITY / MODEL</label><div class="entity-controls"><select id="entity-select" aria-label="Entity or model"><option value="">Scan a folder to find entities</option></select><button id="browse-models" class="button secondary small" type="button" aria-haspopup="dialog" aria-controls="model-browser" disabled>Browse models</button><button id="load-entity" class="button primary small">Load</button></div></div>
-        <div class="animation-toolbar">
-          <div class="animation-setup-heading"><h3>Animation setup</h3><div class="animation-setup-actions"><label for="rig-select">CHOOSE OBJECT</label></div></div>
-          <div class="animation-target-controls"><select id="rig-select" aria-label="Animation target" disabled><option value="">Load an entity to select an object</option></select><button id="clear-object-animation" type="button" class="button secondary small" disabled>Clear animation</button></div>
-          <p id="object-animation-status">Choose an object, then browse animations. Each object keeps its own clip.</p>
-          <div id="animation-set" class="animation-set" role="group" aria-label="Assigned animations" hidden></div>
-          <div id="animation-set-export-controls" class="animation-set-export-controls" hidden>
-            <label class="animation-set-name-label" for="animation-set-name">Animation nickname</label>
-            <div class="animation-set-export-row"><input id="animation-set-name" type="text" maxlength="160" placeholder="Animation nickname" autocomplete="off"><button id="export-animation-set" class="button primary small" type="button">Add to export</button></div>
-            <p id="animation-set-export-status" class="animation-set-export-status" role="status" aria-live="polite"></p>
-            <p class="animation-set-help">Adds the whole entity with its assigned clips and attachments.</p>
-          </div>
+        <div class="entity-toolbar"><label for="entity-select">Model</label><div class="entity-controls"><select id="entity-select" aria-label="Entity or model"><option value="">Scan a folder to find entities</option></select><button id="browse-models" class="button secondary small" type="button" aria-haspopup="dialog" aria-controls="model-browser" disabled>Browse models</button><button id="load-entity" class="button primary small">Load</button></div>
         </div>
         <div class="viewport-wrap">
           <canvas id="viewport" aria-label="Interactive 3D preview. Hold 1 and drag to pan, 2 to zoom, or 3 to orbit." tabindex="0"></canvas>
           <div class="viewport-top"><div class="scene-label"><span class="scene-dot"></span><span id="scene-name">NO ENTITY LOADED</span></div><div class="viewport-actions"><span id="polygon-count" class="polygon-count glass" hidden>Polygons: 0</span><button id="frame-model" class="icon-button glass" title="Frame model (F)" aria-label="Frame model"><svg class="icon"><use href="#i-fit"/></svg></button></div></div>
           <div id="viewport-empty" class="viewport-empty"><h2 id="viewport-error-title" hidden></h2><p>Load an entity, then click any animation<br>to preview it here.</p></div>
           <div id="viewport-loading" class="viewport-loading" hidden><span class="spinner"></span><span id="loading-label">Loading entity…</span></div>
-          <div class="viewport-bottom"><span id="mesh-stats">Neutral mesh preview</span><div class="navigation-hint"><span><kbd>1</kbd> Pan</span><span><kbd>2</kbd> Zoom</span><span><kbd>3</kbd> Orbit</span><span class="drag-hint">+ drag</span></div></div>
+          <div class="viewport-bottom"><span id="mesh-stats">Neutral mesh preview</span></div>
         </div>
         <section class="timeline-panel" aria-label="Playback controls">
-          <div class="timeline-heading"><div class="now-playing"><span class="eyebrow">PREVIEWING</span><strong id="playing-title">No animation selected</strong></div><div class="time-display"><span id="current-time">0.00</span><span class="muted"> / </span><span id="total-time">0.00 s</span></div></div>
-          <input id="timeline" class="timeline" type="range" min="0" max="0" value="0" step="1" aria-label="Animation frame" disabled>
-          <div class="timeline-scale"><span>0</span><span id="timeline-middle">—</span><span id="timeline-end">0 frames</span></div>
-          <div class="transport-row"><div class="transport-buttons"><button id="prev-clip" class="icon-button" title="Previous clip (↑)" aria-label="Previous clip"><svg class="icon"><use href="#i-prev"/></svg></button><button id="step-back" class="icon-button" title="Previous frame (←)" aria-label="Previous frame"><svg class="icon"><use href="#i-left"/></svg></button><button id="play-pause" class="play-button" title="Play / pause (Space)" aria-label="Play" disabled><svg class="icon"><use id="play-icon" href="#i-play"/></svg></button><button id="step-forward" class="icon-button" title="Next frame (→)" aria-label="Next frame"><svg class="icon"><use href="#i-right"/></svg></button><button id="next-clip" class="icon-button" title="Next clip (↓)" aria-label="Next clip"><svg class="icon"><use href="#i-next"/></svg></button></div><div class="frame-readout"><input id="frame-input" type="number" min="0" max="0" value="0" aria-label="Go to frame" disabled><span id="fps-label">FRAME</span></div><div class="playback-settings"><button id="loop-toggle" class="icon-button is-active" title="Loop playback" aria-label="Loop playback" aria-pressed="true"><svg class="icon"><use href="#i-loop"/></svg></button><select id="playback-speed" aria-label="Playback speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></div></div>
+          <div class="timeline-heading">
+            <div class="now-playing"><strong id="playing-title">No animation selected</strong></div>
+            <div class="time-display"><span id="current-time">0.00</span><span class="muted"> / </span><span id="total-time">0.00 s</span></div>
+          </div>
+          <div class="transport-row">
+            <div class="transport-buttons">
+              <button id="prev-clip" class="icon-button" title="Previous clip (↑)" aria-label="Previous clip"><svg class="icon"><use href="#i-prev"/></svg></button>
+              <button id="step-back" class="icon-button" title="Previous frame (←)" aria-label="Previous frame"><svg class="icon"><use href="#i-left"/></svg></button>
+              <button id="play-pause" class="play-button" title="Play / pause (Space)" aria-label="Play" disabled><svg class="icon"><use id="play-icon" href="#i-play"/></svg></button>
+              <button id="step-forward" class="icon-button" title="Next frame (→)" aria-label="Next frame"><svg class="icon"><use href="#i-right"/></svg></button>
+              <button id="next-clip" class="icon-button" title="Next clip (↓)" aria-label="Next clip"><svg class="icon"><use href="#i-next"/></svg></button>
+            </div>
+            <div class="scrub-track">
+              <input id="timeline" class="timeline" type="range" min="0" max="0" value="0" step="1" aria-label="Animation frame" disabled>
+              <div class="timeline-scale"><span>0</span><span id="timeline-middle">—</span><span id="timeline-end">0 frames</span></div>
+            </div>
+            <div class="frame-readout"><input id="frame-input" type="number" min="0" max="0" value="0" aria-label="Go to frame" disabled><span id="fps-label">FRAME</span></div>
+            <div class="playback-settings">
+              <button id="loop-toggle" class="icon-button is-active" title="Loop playback" aria-label="Loop playback" aria-pressed="true"><svg class="icon"><use href="#i-loop"/></svg></button>
+              <select id="playback-speed" aria-label="Playback speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
+            </div>
+          </div>
         </section>
       </section>
 
-      <aside class="inspector-panel">
-        <div class="panel-heading"><h2>Clip details</h2></div>
-        <div class="clip-identity"><span class="eyebrow">SOURCE FILE</span><strong id="detail-filename">Select an animation</strong><span id="detail-path" class="file-path">Original files stay untouched.</span></div>
-        <dl class="clip-metadata"><div><dt>Duration</dt><dd id="detail-duration">—</dd></div><div><dt>Frame rate</dt><dd id="detail-fps">—</dd></div><div><dt>File size</dt><dd id="detail-size">—</dd></div><div><dt>Bone tracks</dt><dd id="detail-bones">—</dd></div></dl>
-        <div id="match-message" class="match-message" hidden></div>
-        <div class="export-manager-launch"><button id="fbx-options-button" class="button primary" type="button" aria-haspopup="dialog" aria-controls="export-menu" aria-expanded="false" title="Export Manager">Export Manager</button></div>
-        <section id="objects-menu" class="objects-menu" aria-labelledby="objects-title">
-          <div class="objects-heading"><h3 id="objects-title">Preview objects</h3></div>
+      <aside class="inspector-panel" aria-label="Animation inspector">
+        <section class="setup-panel" id="setup-menu" aria-labelledby="setup-title">
+          <div class="setup-heading"><h2 id="setup-title">Animation setup</h2><span id="setup-count" class="count" title="Assigned clips" hidden></span></div>
+          <div class="setup-field-heading"><label for="rig-select">Animation target</label><button id="clear-object-animation" class="text-button" type="button" disabled>Clear animation</button></div>
+          <div class="animation-target-controls"><select id="rig-select" aria-label="Animation target" disabled><option value="">Load an entity to select an object</option></select></div>
+          <p id="object-animation-status">Load a model to assign its animation clips.</p>
+          <div id="animation-set" class="animation-set" role="group" aria-label="Assigned animations" hidden></div>
+          <div id="animation-set-export-controls" class="animation-set-export-controls" hidden>
+            <label class="animation-set-name-label" for="animation-set-name">Animation nickname</label>
+            <div class="animation-set-export-row"><input id="animation-set-name" type="text" maxlength="160" placeholder="Animation nickname" autocomplete="off"><button id="export-animation-set" class="button primary small" type="button">Add to export</button></div>
+            <p id="animation-set-export-status" class="animation-set-export-status" role="status" aria-live="polite"></p>
+            <p class="animation-set-help">Includes assigned clips and attachments.</p>
+          </div>
+          <div class="export-manager-launch"><button id="fbx-options-button" class="button primary" type="button" aria-haspopup="dialog" aria-controls="export-menu" aria-expanded="false" title="Export Manager">Export Manager</button></div>
+        </section>
+          <details id="clip-details" class="rail-disclosure"><summary>Clip details</summary>
+          <div class="clip-identity"><span class="eyebrow">SOURCE FILE</span><strong id="detail-filename">Select an animation</strong><span id="detail-path" class="file-path">Original files stay untouched.</span></div>
+          <dl class="clip-metadata"><div><dt>Duration</dt><dd id="detail-duration">—</dd></div><div><dt>Frame rate</dt><dd id="detail-fps">—</dd></div><div><dt>File size</dt><dd id="detail-size">—</dd></div><div><dt>Bone tracks</dt><dd id="detail-bones">—</dd></div></dl>
+          <div id="match-message" class="match-message" hidden></div>
+          </details>
+        <details id="objects-menu" class="object-disclosure rail-disclosure" aria-labelledby="objects-title">
+          <summary id="objects-title">Scene objects</summary>
           <div class="objects-toolbar"><button id="objects-show-all" type="button">Show all</button><button id="objects-hide-all" type="button">Hide all</button><span id="objects-summary" role="status" aria-live="polite">0 of 0 meshes shown</span></div>
           <div id="objects-list" class="objects-list" role="tree" aria-label="Preview object hierarchy"></div>
           <p class="objects-note">Select a model to animate it. Double-click names to rename for new exports.</p>
-        </section>
-        <div class="view-settings"><h3>Viewport</h3><div class="view-toggles"><label><input id="show-textures" type="checkbox" checked><span>Textures</span></label><label><input id="show-grid" type="checkbox" checked><span>Grid</span></label><label><input id="show-skeleton" type="checkbox"><span>Skeleton</span></label><label><input id="show-wireframe" type="checkbox"><span>Wireframe</span></label><label title="Preview only: keep the root at its starting horizontal position. Exports use Keep root motion separately."><input id="lock-root" type="checkbox"><span>In-place</span></label><label title="Preview from the animated Camera joint with a first-person field of view. Uncheck to return to your orbit view."><input id="pov-camera" type="checkbox"><span>POV cam</span></label></div><p id="pov-status" class="view-note" hidden></p><p id="material-status" class="view-note">Textures load from the entity material files.</p></div>
+        </details>
+        <details id="viewport-settings" class="view-settings rail-disclosure"><summary>Viewport settings</summary><div class="view-toggles"><label><input id="show-textures" type="checkbox" checked><span>Textures</span></label><label><input id="show-grid" type="checkbox" checked><span>Grid</span></label><label><input id="show-skeleton" type="checkbox"><span>Skeleton</span></label><label><input id="show-wireframe" type="checkbox"><span>Wireframe</span></label><label title="Preview only: keep the root at its starting horizontal position. Exports use Keep root motion separately."><input id="lock-root" type="checkbox"><span>In-place</span></label><label title="Preview from the animated Camera joint with a first-person field of view. Uncheck to return to your orbit view."><input id="pov-camera" type="checkbox"><span>POV cam</span></label></div><p id="pov-status" class="view-note" hidden></p><p id="material-status" class="view-note">Textures load from the entity material files.</p></details>
       </aside>
     </main>
     </section>
     <section id="workflow-maps" class="workflow-panel animation-workflow" role="tabpanel" aria-labelledby="tab-maps" hidden>
       <section class="source-bar" aria-label="Map library source">
-        <div class="root-control"><label for="maps-root">Library source</label><div class="input-with-icon"><svg class="icon"><use href="#i-folder"/></svg><input id="maps-root" type="text" spellcheck="false" autocomplete="off" placeholder="Choose an exported map folder"></div></div>
+        <div class="root-control"><label for="maps-root">Library source</label><div class="input-with-icon"><svg class="icon"><use href="#i-folder"/></svg><input id="maps-root" aria-describedby="maps-root-help" type="text" spellcheck="false" autocomplete="off" placeholder="Choose an exported map folder"></div></div>
         <button id="maps-browse-root" class="button secondary" type="button">Browse…</button><button id="maps-scan" class="button primary" type="button">Scan folder ↗</button>
-        <p class="source-help">Finds .owmap files and keeps their exported model and texture folders together.</p>
+        <p id="maps-root-help" class="source-help">Finds .owmap files and keeps their exported model and texture folders together.</p>
       </section>
       <div class="workspace maps-workspace">
         <aside class="library-panel"><div class="panel-heading"><h2>Map library</h2><span id="maps-count" class="count">0</span></div>
@@ -129,19 +162,26 @@
             <div class="viewport-top"><div class="scene-label"><span class="scene-dot"></span><span id="maps-scene-name">No map loaded</span></div><div class="viewport-actions"><span id="maps-polygon-count" class="polygon-count glass" hidden>Polygons: 0</span><button id="maps-frame" class="icon-button glass" type="button" aria-label="Frame map" title="Frame map (F). Shift-click or Shift+F includes distant scenery."><svg class="icon"><use href="#i-fit"/></svg></button></div></div>
             <div id="maps-empty" class="viewport-empty"><p id="maps-empty-message">Select an exported map from the library.<br>Extract maps from the Toolchain tab.</p></div>
             <div id="maps-loading" class="viewport-loading" hidden><span class="spinner"></span><span id="maps-loading-label">Loading map…</span></div>
-            <div class="viewport-bottom"><span id="maps-mesh-stats">Static map preview</span><div class="navigation-hint"><span><kbd>1</kbd> Pan</span><span><kbd>2</kbd> Zoom</span><span><kbd>3</kbd> Orbit</span><span>+ drag</span></div></div>
+            <div class="viewport-bottom"><span id="maps-mesh-stats">Static map preview</span></div>
           </div>
-          <section class="map-export-panel" aria-label="Map export">
-            <div class="map-export-fields"><label for="maps-export-name">Export name</label><input id="maps-export-name" type="text" maxlength="160" placeholder="Map name" autocomplete="off"><button id="maps-export" class="button primary small" type="button" disabled>Export C4D</button>
-              <label for="maps-output">Output directory</label><input id="maps-output" type="text" spellcheck="false" autocomplete="off"><button id="maps-browse-output" class="button secondary small" type="button">Browse…</button></div>
-            <div class="map-export-options"><label><input id="maps-bake-textures" type="checkbox" checked> Bake textures</label><button id="maps-open-output" class="text-button" type="button">Open output folder</button><span id="maps-export-spinner" class="spinner" hidden></span></div>
+
+        </section>
+        <aside class="inspector-panel maps-inspector" aria-label="Map inspector">
+          <section class="setup-panel map-setup" aria-labelledby="map-export-title">
+            <div class="setup-heading"><h2 id="map-export-title">Map export</h2></div>
+            <label for="maps-export-name">Export name</label>
+            <input id="maps-export-name" type="text" maxlength="160" placeholder="Map name" autocomplete="off">
+            <label for="maps-output">Output directory</label>
+            <div class="map-output-row"><input id="maps-output" type="text" spellcheck="false" autocomplete="off"><button id="maps-browse-output" class="button secondary small" type="button">Browse…</button></div>
+            <div class="map-export-options"><label><input id="maps-bake-textures" type="checkbox" checked> Bake textures</label><button id="maps-open-output" class="text-button" type="button">Open output folder</button></div>
+            <button id="maps-export" class="button primary small" type="button" disabled>Export C4D</button><span id="maps-export-spinner" class="spinner" hidden></span>
             <p id="maps-status" class="map-status" role="status" aria-live="polite">Ready. Scan your exported map library.</p>
           </section>
-        </section>
-        <aside class="inspector-panel maps-inspector"><div class="panel-heading"><h2>Map details</h2></div><div class="clip-identity"><span id="maps-source-file" class="file-path">No map loaded</span></div>
-          <dl class="clip-metadata"><div><dt>Objects</dt><dd id="maps-detail-objects">—</dd></div><div><dt>Polygons</dt><dd id="maps-detail-polygons">—</dd></div></dl>
-          <section id="maps-objects-menu" class="objects-menu" aria-labelledby="maps-objects-title"><div class="objects-heading"><h3 id="maps-objects-title">Preview objects</h3></div><div class="objects-toolbar"><button id="maps-objects-show-all" type="button">Show all</button><button id="maps-objects-hide-all" type="button">Hide all</button><span id="maps-objects-summary" class="objects-summary" role="status">0 of 0 meshes shown</span></div><div id="maps-objects-list" class="objects-list" role="tree" aria-label="Map object hierarchy"></div><p class="objects-note">Double-click a name to rename it for export. Visibility affects the preview.</p></section>
-          <div class="view-settings"><h3>Viewport</h3><div class="view-toggles"><label><input id="maps-textures" type="checkbox" checked> Textures</label><label><input id="maps-grid" type="checkbox" checked> Grid</label><label><input id="maps-wireframe" type="checkbox"> Wireframe</label></div><p id="maps-material-status" class="view-note">Static geometry and common material maps.</p><details id="maps-notes-panel" class="map-notes" hidden><summary>Map notes</summary><pre id="maps-notes"></pre></details></div>
+          <details id="maps-details" class="rail-disclosure"><summary>Map details</summary><div class="clip-identity"><span id="maps-source-file" class="file-path">No map loaded</span></div>
+            <dl class="clip-metadata"><div><dt>Objects</dt><dd id="maps-detail-objects">—</dd></div><div><dt>Polygons</dt><dd id="maps-detail-polygons">—</dd></div></dl>
+          </details>
+          <details id="maps-objects-menu" class="object-disclosure rail-disclosure" aria-labelledby="maps-objects-title"><summary id="maps-objects-title">Scene objects</summary><div class="objects-toolbar"><button id="maps-objects-show-all" type="button">Show all</button><button id="maps-objects-hide-all" type="button">Hide all</button><span id="maps-objects-summary" class="objects-summary" role="status">0 of 0 meshes shown</span></div><div id="maps-objects-list" class="objects-list" role="tree" aria-label="Map object hierarchy"></div><p class="objects-note">Double-click a name to rename it for export. Visibility affects the preview.</p></details>
+          <details id="maps-viewport-settings" class="view-settings rail-disclosure"><summary>Viewport settings</summary><div class="view-toggles"><label><input id="maps-textures" type="checkbox" checked> Textures</label><label><input id="maps-grid" type="checkbox" checked> Grid</label><label><input id="maps-wireframe" type="checkbox"> Wireframe</label></div><p id="maps-material-status" class="view-note">Static geometry and common material maps.</p></details><details id="maps-notes-panel" class="map-notes" hidden><summary>Map notes</summary><pre id="maps-notes"></pre></details>
         </aside>
       </div>
     </section>
@@ -167,7 +207,7 @@
   <div class="toolchain-export-fields">
     <div class="toolchain-field"><label for="toolchain-category">Category</label><select id="toolchain-category" disabled><option value="">Loading supported workflows…</option></select></div>
     <div class="toolchain-field"><label for="toolchain-hero">Hero</label><div class="toolchain-field-action"><select id="toolchain-hero" disabled><option value="">Load heroes from your installation</option></select><button id="toolchain-load-heroes" class="button secondary small" type="button">Load heroes</button></div></div>
-    <div id="toolchain-asset-field" class="toolchain-field"><label for="toolchain-asset">Asset</label><div class="toolchain-field-action"><select id="toolchain-asset" disabled><option value="">Choose a hero first</option></select><button id="toolchain-load-assets" class="button secondary small" type="button">Load assets</button></div></div>
+    <div id="toolchain-asset-field" class="toolchain-field"><label for="toolchain-asset">Asset</label><select id="toolchain-asset" disabled><option value="">Choose a hero first</option></select></div>
   </div>
   <p id="toolchain-category-description" class="toolchain-description"></p>
   <div id="toolchain-export-options" class="toolchain-export-options"></div>
@@ -186,18 +226,51 @@
     </section>
     <footer class="status-bar" aria-live="polite"><span id="status-indicator" class="status-dot"></span><span id="status-text">Connecting to the local application…</span></footer>
   </div>
-  <dialog id="export-menu" class="export-menu" aria-labelledby="export-menu-title">
+  <dialog id="export-menu" class="export-menu export-studio" aria-labelledby="export-menu-title">
     <div class="export-menu-heading"><h2 id="export-menu-title">Export Manager</h2><button id="close-export-menu" class="icon-button" type="button" aria-label="Close Export Manager"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
-    <div class="export-destination"><label for="output-path">Output folder</label><div class="export-destination-row"><div class="input-with-icon"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><input id="output-path" type="text" spellcheck="false" placeholder="Choose where to save exported animations" autocomplete="off" aria-describedby="output-help"></div><button id="browse-output" class="button secondary small" type="button">Browse…</button></div><p id="output-help" class="output-help" aria-live="polite" hidden></p></div>
-    <div class="export-queue-heading"><h3>Animations</h3><span id="export-queue-summary" role="status" aria-live="polite">0 selected</span></div>
-    <div id="export-queue-list" class="export-queue-list" role="list" aria-label="Animations queued for export"><p class="export-queue-empty">Add an animation setup, then check the animations you want to export.</p></div>
-    <details class="export-menu-settings"><summary>Export settings</summary><div class="export-option-list">
-      <label class="export-option" title="Save supported material maps as PNG files in the output tex folder. Requires Include mesh."><input id="fbx-textures" type="checkbox" checked><span>Bake textures</span></label>
-      <label class="export-option" title="Include the model geometry and skin weights with the animated skeleton."><input id="fbx-mesh" type="checkbox" checked><span>Include mesh</span></label>
-      <label class="export-option" title="Preserve horizontal root movement in the C4D animation. Independent of the In-place preview setting."><input id="fbx-root-motion" type="checkbox" checked><span>Keep root motion</span></label>
-    </div><div class="c4d-setup"><h4>Cinema 4D + Octane</h4><p>C4D exports use Y up and centimeters. Keep Cinema 4D open with Octane and the bundled <strong>Avolition C4D Bridge</strong> plugin enabled.</p><button id="check-c4d" class="button secondary small" type="button" disabled>Check connection</button><p id="c4d-connection-status" class="c4d-connection-status" role="status" aria-live="polite">Connection has not been checked.</p></div></details>
-    <p id="export-queue-status" class="export-queue-status" role="status" aria-live="polite"></p>
-    <div class="export-menu-actions"><button id="open-export-output" class="button secondary small" type="button">Open output folder</button><button id="export-selected" class="button primary small" type="button" disabled>Export selected</button></div>
+    <div class="export-tabs" role="tablist" aria-label="Export destination">
+      <button id="export-rig-tab" type="button" role="tab" aria-selected="true" aria-controls="export-rig-panel" autofocus>Stager rig</button>
+      <button id="export-files-tab" type="button" role="tab" aria-selected="false" aria-controls="export-files-panel" tabindex="-1">Cinema export</button>
+    </div>
+    <div class="export-studio-body">
+      <section id="export-rig-panel" role="tabpanel" aria-labelledby="export-rig-tab">
+        <p class="export-mode-help">Select setups for one rig in the active Cinema 4D project. Each setup becomes a Motion Source.</p>
+        <div id="export-queue-group">
+          <div class="export-queue-heading"><h3>Animation setups</h3><span id="export-queue-summary" role="status" aria-live="polite">0 selected</span></div>
+          <div id="export-queue-list" class="export-queue-list" role="list" aria-label="Queued animation setups"></div>
+        </div>
+        <details id="stager-warnings" class="export-menu-settings" hidden><summary>Rig import warnings</summary><ul id="stager-warning-list" class="export-queue-status"></ul></details>
+      </section>
+      <section id="export-files-panel" role="tabpanel" aria-labelledby="export-files-tab" hidden>
+        <p class="export-mode-help">Save a separate Cinema 4D file for each selected setup.</p>
+        <div class="export-destination"><label for="output-path">Output folder</label><div class="export-destination-row"><div class="input-with-icon"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg><input id="output-path" type="text" spellcheck="false" placeholder="Choose where to save exported animations" autocomplete="off" aria-describedby="output-help"></div><button id="browse-output" class="button secondary small" type="button">Browse…</button></div><p id="output-help" class="output-help" aria-live="polite" hidden></p></div>
+        <details class="export-menu-settings"><summary>File export settings</summary>
+          <div class="export-option-list">
+            <label class="export-option" title="Save supported material maps as PNG files in the output tex folder. Requires Include mesh."><input id="fbx-textures" type="checkbox" checked><span>Bake textures</span></label>
+            <label class="export-option" title="Include the model geometry and skin weights with the animated skeleton."><input id="fbx-mesh" type="checkbox" checked><span>Include mesh</span></label>
+            <label class="export-option" title="Preserve horizontal root movement in the C4D animation."><input id="fbx-root-motion" type="checkbox" checked><span>Keep root motion</span></label>
+          </div>
+        </details>
+      </section>
+      <div class="export-connection"><h3>Cinema 4D Bridge</h3><button id="check-c4d" class="button secondary small" type="button" disabled>Check connection</button><p id="c4d-connection-status" class="c4d-connection-status" role="status" aria-live="polite">Connection has not been checked.</p></div>
+      <p id="export-queue-status" class="export-queue-status" role="status" aria-live="polite"></p>
+    </div>
+    <div class="export-menu-actions"><button id="open-export-output" class="button secondary small" type="button" hidden>Open output folder</button><button id="create-stager-rig" class="button primary small" type="button" disabled>Create Stager rig…</button><button id="export-selected" class="button primary small" type="button" disabled hidden>Export selected</button></div>
+  </dialog>
+  <dialog id="stager-rig-dialog" class="export-menu export-studio" aria-labelledby="stager-title">
+    <div class="export-menu-heading"><h2 id="stager-title">Create Stager rig</h2></div>
+    <div class="export-studio-body">
+      <dl class="stager-review"><dt>Cinema 4D project</dt><dd id="stager-document"></dd><dt>Motion System target</dt><dd id="stager-target"></dd></dl>
+      <p id="stager-existing" class="export-queue-status" hidden></p>
+      <div class="stager-fields">
+        <label>Rig type<select id="stager-kind"><option value="pov">POV</option><option value="actor">Actor</option></select></label>
+        <label id="stager-camera-label">Camera<select id="stager-camera"></select></label>
+      </div>
+      <div class="export-queue-heading"><h3>Motion Sources</h3></div>
+      <div id="stager-sources"></div>
+      <p id="stager-status" class="export-queue-status" role="status"></p>
+    </div>
+    <div class="export-menu-actions"><button id="stager-cancel" class="button secondary small" type="button">Cancel</button><button id="stager-insert" class="button primary small" type="button" disabled>Create rig</button></div>
   </dialog>
   <dialog id="model-browser" class="model-browser" aria-labelledby="model-browser-heading" hidden>
     <div class="model-browser-heading"><h2 id="model-browser-heading">Browse models</h2><span id="model-browser-count">0 items</span><button id="model-browser-close" class="icon-button" type="button" aria-label="Close model browser"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
@@ -210,7 +283,7 @@
       </section>
       <section class="model-browser-preview" aria-label="Selected model preview">
         <div class="model-browser-preview-heading"><div><h3 id="model-browser-title">Choose a model</h3><p id="model-browser-context">Select an item to preview it before loading.</p></div><button id="model-browser-frame" class="icon-button" type="button" aria-label="Frame model preview" title="Frame preview (F)"><svg class="icon"><use href="#i-fit"/></svg></button></div>
-        <div class="model-browser-viewport"><canvas id="model-browser-canvas" tabindex="0" aria-label="Model preview. Hold 1 to pan, 2 to zoom, 3 to orbit."></canvas><div id="model-browser-empty" class="model-browser-empty">Select an entity or model to preview it.</div><div id="model-browser-loading" class="model-browser-loading" hidden><span class="spinner"></span><span>Loading preview…</span></div><div class="model-browser-navigation"><span><kbd>1</kbd> Pan</span><span><kbd>2</kbd> Zoom</span><span><kbd>3</kbd> Orbit</span><span>+ drag</span></div></div>
+        <div class="model-browser-viewport"><canvas id="model-browser-canvas" tabindex="0" aria-label="Model preview. Hold 1 to pan, 2 to zoom, 3 to orbit."></canvas><div id="model-browser-empty" class="model-browser-empty">Select an entity or model to preview it.</div><div id="model-browser-loading" class="model-browser-loading" hidden><span class="spinner"></span><span>Loading preview…</span></div></div>
         <div class="model-browser-preview-info"><p id="model-browser-stats"></p><p id="model-browser-path" class="file-path"></p><details id="model-browser-notes-panel" hidden><summary>Preview notes</summary><pre id="model-browser-notes"></pre></details></div>
       </section>
     </div>

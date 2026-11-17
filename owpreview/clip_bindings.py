@@ -29,7 +29,7 @@ class ClipBindingIndex:
     def _fingerprint(stat):
         return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
 
-    def _read_one(self, path):
+    def _read_one(self, path, pose_bones=None):
         if not isinstance(path, str) or not path or len(path) > 32767:
             raise ValueError('Use the full path to an .owanimclip file.')
         source = Path(path)
@@ -41,11 +41,16 @@ class ClipBindingIndex:
         source = Path(os.path.abspath(path))
         key = os.path.normcase(str(source))
         before = self._fingerprint(source.stat())
+        if pose_bones:
+            metadata = read_clip_binding_metadata(source, pose_bones)
+            if self._fingerprint(source.stat()) != before:
+                raise OSError('File changed while reading animation bindings; scan again.')
+            return {'boneNames': metadata['boneNames'], 'firstPose': metadata['firstPose']}
         with self._lock:
             cached = self._cache.get(key)
             if cached and cached[0] == before:
                 self._cache.move_to_end(key)
-                return list(cached[1])
+                return {'boneNames': list(cached[1])}
             if cached:
                 self._bytes -= cached[2]
                 del self._cache[key]
@@ -65,9 +70,9 @@ class ClipBindingIndex:
                 while len(self._cache) > self.max_entries or self._bytes > self.max_bytes:
                     _, removed = self._cache.popitem(last=False)
                     self._bytes -= removed[2]
-        return list(names)
+        return {'boneNames': list(names)}
 
-    def read(self, paths):
+    def read(self, paths, pose_bones=None):
         """Return ``{clips: [{path, boneNames, error?}]}`` in request order.
 
         The caller can submit batches asynchronously. Original path strings are
@@ -75,10 +80,14 @@ class ClipBindingIndex:
         """
         if not isinstance(paths, list) or len(paths) > self.MAX_BATCH:
             raise ValueError(f'Request animation bindings in batches of at most {self.MAX_BATCH} paths.')
+        if pose_bones is not None and (not isinstance(pose_bones, list) or len(pose_bones) > 1024
+                or any(not isinstance(name, str) or not name for name in pose_bones)):
+            raise ValueError('Invalid frame-zero bone selection.')
+        pose_bones = set(pose_bones or [])
         results = []
         for path in paths:
             try:
-                results.append({'path': path, 'boneNames': self._read_one(path)})
+                results.append({'path': path, **self._read_one(path, pose_bones)})
             except (OSError, ValueError, TypeError) as error:
                 results.append({'path': path if isinstance(path, str) else None,
                                 'boneNames': None, 'error': str(error) or type(error).__name__})

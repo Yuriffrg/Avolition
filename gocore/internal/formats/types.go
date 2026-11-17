@@ -284,8 +284,9 @@ type Clip struct {
 
 // ClipBindingMetadata is read_clip_binding_metadata's result.
 type ClipBindingMetadata struct {
-	Path      string   `json:"path"`
-	BoneNames []string `json:"boneNames"`
-	BoneCount int      `json:"boneCount"`
-	Warnings  []string `json:"warnings"`
+	FirstPose []ClipBone `json:"firstPose,omitempty"`
+	Path      string     `json:"path"`
+	BoneNames []string   `json:"boneNames"`
+	BoneCount int        `json:"boneCount"`
+	Warnings  []string   `json:"warnings"`
 }

@@ -125,7 +125,9 @@ func (d duplicateIndex) Annotate(clips []*ClipEntry) []string {
 
 type clipBindings struct{ index *clipbindings.Index }
 
-func (c clipBindings) Read(paths any) (any, error) { return c.index.Read(paths) }
+func (c clipBindings) Read(paths, poseBones any) (any, error) {
+	return c.index.ReadWithPose(paths, poseBones)
+}
 
 type bridgeClient struct{ client *c4dbridge.Client }
 

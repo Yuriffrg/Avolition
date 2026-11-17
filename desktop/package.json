@@ -1,7 +1,7 @@
 {
   "name": "avolition",
   "productName": "Avolition",
-  "version": "0.8.29",
+  "version": "0.8.35",
   "description": "Overwatch export toolchain and local animation browser",
   "private": true,
   "license": "GPL-3.0-or-later",

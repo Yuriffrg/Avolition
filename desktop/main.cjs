@@ -14,7 +14,7 @@ const ALLOWED_METHODS = new Set([
   'browse_entity', 'scan_root', 'load_entity', 'preview_entity', 'release_entity_preview', 'load_texture', 'load_animation', 'save_annotation', 'ping', 'close_app',
   'workflow_settings', 'use_library_directory', 'browse_workflow_directory', 'open_toolchain_output',
   'toolchain_status', 'toolchain_check', 'toolchain_install', 'toolchain_validate', 'toolchain_list', 'toolchain_start', 'toolchain_cancel',
-  'analysis_start', 'analysis_status', 'analysis_index', 'analysis_detail', 'read_clip_bindings', 'library_settings', 'export_queue_save', 'export_queue_remove', 'export_queue_run', 'open_export_output', 'maps_settings', 'scan_maps', 'load_map', 'export_map', 'export_map_start', 'export_map_status', 'browse_map', 'open_map_output', 'object_names', 'save_object_name',
+  'analysis_start', 'analysis_status', 'analysis_index', 'analysis_detail', 'read_clip_bindings', 'library_settings', 'export_queue_save', 'export_queue_remove', 'export_queue_run', 'stager_rig_destination', 'create_stager_rig', 'open_export_output', 'maps_settings', 'scan_maps', 'load_map', 'export_map', 'export_map_start', 'export_map_status', 'browse_map', 'open_map_output', 'object_names', 'save_object_name',
 ]);
 const REQUEST_TIMEOUT = 180000;
 const MAX_PENDING = 128;
@@ -162,7 +162,7 @@ class Backend {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`${method.replaceAll('_', ' ')} timed out. The importer may still be finishing the operation.`));
-      }, REQUEST_TIMEOUT);
+      }, method === 'create_stager_rig' ? 40 * 60 * 1000 : REQUEST_TIMEOUT);
       this.pending.set(id, { resolve, reject, timer });
       this.child.stdin.write(request, 'utf8', error => {
         if (!error) return;

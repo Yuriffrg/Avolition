@@ -1,0 +1,51 @@
+/* Use the available preview width, including when the side panels are open. */
+.timeline-panel {
+  container-type: inline-size;
+  height: auto;
+  padding: 6px 12px 7px;
+}
+.timeline-panel .timeline-heading { gap: 12px; line-height: 16px; }
+.timeline-panel .now-playing strong { max-width: none; }
+.timeline-panel .transport-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+.timeline-panel .transport-buttons,
+.timeline-panel .playback-settings { gap: 3px; }
+.timeline-panel .icon-button { width: 27px; height: 27px; }
+.timeline-panel .play-button { width: 33px; height: 27px; margin: 0; }
+.timeline-panel .scrub-track { min-width: 0; }
+.timeline-panel .timeline {
+  height: 16px;
+  margin: 0;
+  background: transparent;
+}
+.timeline::-webkit-slider-runnable-track {
+  height: 3px;
+  background: linear-gradient(to right, var(--accent) var(--progress, 0%), var(--line) var(--progress, 0%));
+}
+.timeline::-webkit-slider-thumb { margin-top: -5px; }
+.timeline::-moz-range-track { height: 3px; background: var(--line); }
+.timeline::-moz-range-progress { height: 3px; background: var(--accent); }
+.timeline-scale {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  line-height: 10px;
+}
+.timeline-scale :last-child { text-align: right; }
+.timeline-panel .frame-readout { gap: 4px; white-space: nowrap; }
+.timeline-panel .frame-readout span { display: inline; }
+.timeline-panel .frame-readout input { width: 48px; }
+.timeline-panel .playback-settings select { width: 57px; height: 27px; }
+
+@container (max-width: 510px) {
+  .timeline-panel .transport-row {
+    grid-template-columns: auto 1fr auto;
+    gap: 3px 6px;
+  }
+  .timeline-panel .scrub-track { grid-column: 1 / -1; grid-row: 1; }
+  .timeline-panel .frame-readout { justify-self: end; }
+}

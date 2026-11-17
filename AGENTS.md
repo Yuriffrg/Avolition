@@ -45,6 +45,16 @@ c4d-plugin/ + owpreview/c4d_bridge.py, c4d_scene.py, c4d_octane.py
   `gocore/internal/api/stdio.go`); any other request waits for them first.
   Only add a method there if it reads shared state and never changes it.
 
+## Avolition and Stager
+
+Avolition owns the exporter, the Go core and the Avolition C4D Bridge. Avolition
+Stager has its own source tree, package and release number. Build and test
+exporter changes here. Use Stager's published registration interface for the
+optional rig link. Keep scene storage, driving and recording in Stager.
+Visual changes can follow Stager's conventions using exporter-owned styles and
+assets. Avolition preview, file export and packaging operate independently of
+the Stager application.
+
 ## Making a change
 
 1. **Behaviour changes go in Go** (`gocore/internal/...`). If you change

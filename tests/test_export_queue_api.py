@@ -228,7 +228,7 @@ class ExportQueueAPITests(unittest.TestCase):
         catalog['annotations'] = {'source': {'name': 'Keep nickname'}}
         (self.profile / 'catalog.json').write_text(json.dumps(catalog), encoding='utf-8')
         migrated = BrowserAPI(self.profile)
-        self.assertEqual(migrated.library_settings()['data'], {'sort': 'object-match', 'hideDuplicates': False})
+        self.assertEqual(migrated.library_settings()['data'], {'sort': 'object-match', 'hideDuplicates': False, 'hideOriginPoses': True})
         saved = json.loads((self.profile / 'catalog.json').read_text(encoding='utf-8'))
         self.assertEqual(saved['librarySortRevision'], 1)
         self.assertEqual(saved['annotations'], catalog['annotations'])

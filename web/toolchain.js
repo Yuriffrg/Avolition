@@ -187,7 +187,6 @@ export function initToolchain(api, hooks = {}, bootstrap = {}) {
     $('toolchain-update').disabled = locked;
     $('toolchain-check').disabled = locked;
     $('toolchain-load-heroes').disabled = locked || unavailable;
-    $('toolchain-load-assets').disabled = locked || unavailable;
     $('toolchain-category').disabled = locked || !state.status.capabilities?.categories?.length;
     $('toolchain-hero').disabled = locked || !catalogCurrent() || !state.status.job?.catalog?.heroes?.length;
     $('toolchain-asset').disabled = locked || !catalogCurrent() || !$('toolchain-hero').value || !$('toolchain-category').value;
@@ -352,9 +351,9 @@ export function initToolchain(api, hooks = {}, bootstrap = {}) {
   }));
   $('toolchain-check').addEventListener('click', () => runAction(() => api('toolchain_check')));
   for (const id of ['toolchain-install', 'toolchain-update']) $(id).addEventListener('click', () => runAction(() => api('toolchain_install')));
-  const loadCatalog = () => runAction(async () => { if (await validate()) return api('toolchain_list'); });
-  $('toolchain-load-heroes').addEventListener('click', loadCatalog);
-  $('toolchain-load-assets').addEventListener('click', loadCatalog);
+  $('toolchain-load-heroes').addEventListener('click', () => runAction(async () => {
+    if (await validate()) return api('toolchain_list');
+  }));
   $('toolchain-load-maps')?.addEventListener('click', () => runAction(async () => {
     if (await validate()) return api('toolchain_list', {workflow: 'maps'});
   }));

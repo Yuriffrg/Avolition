@@ -1,15 +1,15 @@
-"""Avolition's native C4D/Octane export companion. No scene edits or network."""
+"""Avolition's native C4D/Octane export companion. Local mailbox, processed on the main thread."""
 import os
 import sys
 import c4d
 
 sys.path.insert(0, os.path.dirname(__file__))
 from whitehound_c4d.c4d_bridge import BridgeService
-from whitehound_c4d.c4d_scene import build_scene
+from whitehound_c4d.c4d_stager import dispatch
 
 # Private prototype IDs, separate from the user's Overwatch Entities/Maps IDs.
 PLUGIN_ID = 1066202606
-BRIDGE_VERSION = '0.7.10'
+BRIDGE_VERSION = '0.7.14'
 BRIDGE_NAME = 'Avolition C4D Bridge'
 
 
@@ -18,7 +18,7 @@ def capabilities():
             'pluginPath': os.path.dirname(os.path.abspath(__file__)),
             'cinemaVersion': c4d.GetC4DVersion(), 'mapInstances': True,
             'motionClips': True, 'skeletonMotionClips': True, 'combinedMotionClips': True, 'mapTiming24': True,
-            'exactFrameTimes': True, 'optimizedGameplay1P': True, 'povHeightZero': True,
+            'exactFrameTimes': True, 'optimizedGameplay1P': True, 'povHeightZero': True, 'stagerRig': True,
             'octane': c4d.plugins.FindPlugin(1029501, c4d.PLUGINTYPE_MATERIAL) is not None}
 
 
@@ -33,7 +33,7 @@ class AvolitionBridge(c4d.plugins.MessageData):
         if ident == c4d.MSG_TIMER:
             try:
                 if self.service is None:
-                    self.service = BridgeService(build_scene, capabilities)
+                    self.service = BridgeService(dispatch, capabilities)
                 self.service.tick()
             except Exception as error:
                 print('[Avolition C4D Bridge]', error)

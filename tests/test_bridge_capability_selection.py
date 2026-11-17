@@ -46,6 +46,25 @@ class BridgeCapabilitySelectionTests(unittest.TestCase):
                        mapTiming24=True, exactFrameTimes=True, optimizedGameplay1P=True, povHeightZero=True))
             self.assertEqual(client.status()['instance'], 'newest')
 
+    def test_atomic_publish_retries_a_transient_windows_reader(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'status-test.json'
+            write_json(path, {'heartbeat': 1})
+            replace = Path.replace
+            calls = []
+            def racing_replace(source, target):
+                calls.append(target)
+                if len(calls) == 1:
+                    self.assertEqual(read_json(target), {'heartbeat': 1})
+                    error = PermissionError('simulated open reader')
+                    error.winerror = 5
+                    raise error
+                return replace(source, target)
+            with patch.object(Path, 'replace', racing_replace), patch('owpreview.c4d_bridge.time.sleep'):
+                write_json(path, {'heartbeat': 2})
+            self.assertEqual(calls, [path, path])
+            self.assertEqual(read_json(path), {'heartbeat': 2})
+
     def test_map_timing_is_checked_before_payload_or_texture_work(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / 'output'

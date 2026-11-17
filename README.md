@@ -1,7 +1,17 @@
-# Avolition 0.8.23 — Go backend
+# Avolition 0.8.35
 
 
 Avolition, previously Whitehound, is a standalone Windows application for exporting and browsing Overwatch models, maps and animations. Load an entity or model once, click clips to preview them, and collect named setups in a persistent export list. Open exported maps in their own workspace and export static scenes to Cinema 4D.
+
+In **Animation setup**, choose an animation target, select its library clip, and add the named setup to the export list. In **Export Manager → Stager rig**, check the setups for one entity and click **Create Stager rig…**. Review the Cinema 4D project and Motion System target. For POV, choose a camera and inputs. For an Actor, assign Idle, movement and actions. Click **Create rig**, then **Refresh scene** in Stager. Use **Cinema export → Export selected** to write separate Cinema 4D scenes.
+
+Use Avolition C4D Bridge 0.7.14 and Avolition Stager 0.19.1 or later to repair missing registration links when importing into an existing project. Stager has its own installer folder and release.
+
+Open **Filters** beside the clip search field for the object selector, sorting and visibility options. **Hide unlikely matches** starts enabled. For a Gameplay3P body, it checks the source model, the joints shared with the selected body and the first-frame head or camera position. This keeps body-authored partial clips available and filters out first-person arms or weapon clips that drive only a few shared joints. Uncheck the box to browse everything. Hover a clip's coverage bar to see the reason for an unlikely match.
+
+Version 0.8.32 uses the supplied Avolition artwork for the Windows icon and favicon. In Toolchain, **Load heroes** loads the hero and asset lists together. Choose a hero and category to populate the Asset dropdown.
+
+Actor Motion Sources can use different track counts on the same skeleton. If animated nonuniform scale would require joint shear, the Actor export holds scale at its first-frame value and bakes its effect on joint positions. **Create Stager rig** reports the affected action in the import warnings. The native source keeps its timing and position/rotation tracks. It omits direct scale deformation. Bridge 0.7.12 writes new Actor skins at Cinema 4D's 16-bit precision so each point's weights sum to one after reopening. Re-import keeps existing Weight tags.
 
 Version 0.8.23 replaces the Python backend with a Go backend (`gocore/`). The interface, saved settings, export list, file formats and Cinema 4D bridge are unchanged; the Go core answers every request the same way the Python core did, verified by replaying identical requests through both. Loading is much faster and lighter: on a large synthetic library the heaviest character (640k vertices) reaches the window in about 0.4 s instead of 7.5 s, a 3,600-placement map in about 0.4 s instead of 4.4 s, startup takes about 5 ms instead of 110–170 ms, and peak backend memory drops from about 930 MB to about 200 MB. Meshes, animations and textures now travel to the window as binary data instead of JSON text. The portable folder no longer contains a Python runtime. See [HANDOFF.md](HANDOFF.md) for the full change list and measurements.
 
@@ -31,13 +41,13 @@ Version 0.8.13 improved map material coverage, close-up navigation and variant b
 
 ## Find animations for the selected object
 
-**For selected object** in the Animation library uses the loaded entity's actual objects and skeletons. It stays synchronized with **Choose object** above the preview. Counts are read from each model, with no per-character count table. Root Gameplay1P/Gameplay3P objects receive a descriptive arms/body prefix; attached objects retain their source names rather than being classified by their bone counts.
+**For selected object** in the Animation library uses the loaded entity's actual objects and skeletons. It stays synchronized with **Choose object** in **Animation setup**. Counts are read from each model, with no per-character count table. Root Gameplay1P/Gameplay3P objects receive a descriptive arms/body prefix; attached objects retain their source names rather than being classified by their bone counts.
 
-The default **For selected object** sort prioritizes clips from the selected model's animation folder, including identical copies elsewhere, then ranks actual joint-ID overlap and unmatched tracks. Folder context is scoped to the same export/hero/skin path, so another character with shared joint names does not receive that folder priority. This is a browsing aid: all clips remain available and no perspective or compatibility restriction is applied.
+The default **For selected object** sort prioritizes clips from the selected model's animation folder, including identical copies elsewhere, then ranks actual joint-ID overlap and unmatched tracks. Folder context is scoped to the same export/hero/skin path, so another character with shared joint names does not receive that folder priority. On a Gameplay3P body, **Hide unlikely matches** controls which results appear. With the box unchecked, **For selected object** sorts likely matches ahead of known mismatches.
 
 Each row shows a small coverage bar and **matched bones / selected skeleton bones**, separately from total clip tracks. For example, a 112-track clip matching 108 joints of a 190-bone rig shows **108 / 190 bones covered**. Partial animations remain usable. Coverage does not establish an animation's action, pose quality, or how many joints visibly move.
 
-Search and sorting share one compact control. **For selected object** is the default; **Most tracks first** and **Nicknamed first** remain prominent. **Name A–Z**, size, duration and ascending-track sorts are under **More sorting options**. Track-count groups and their filter have been removed. On the first upgrade, an older Most tracks first preference moves to For selected object; subsequent choices and Hide duplicates persist.
+Search is always visible. Open **Filters** to change the sort order. **For selected object** is the default; **Most tracks first** and **Nicknamed first** remain prominent. **Name A–Z**, size, duration and ascending-track sorts are under **More sorting options**. Track-count groups and their filter have been removed. On the first upgrade, an older Most tracks first preference moves to For selected object; subsequent choices and Hide duplicates persist.
 
 Bone names are read automatically in small background batches after loading an object and cached in memory. Unavailable metadata is shown as unavailable, not a zero match. Filtering and sorting preserve assignments and playback.
 
@@ -46,11 +56,11 @@ Bone names are read automatically in small background batches after loading an o
 The **Animation setup** panel keeps one clip assigned to each object and exports the complete setup to Cinema 4D. For a first-person character such as Widowmaker:
 
 1. Open **Animations**, scan the **Library source**, and load `Gameplay1P.owentity`.
-2. Use **Choose object** to select the arms, then click the arm animation in the library.
+2. Open **Animation setup** next to the model selector. Use **Choose object** to select the arms, then click the arm animation in the library.
 3. Select the gun object and browse its animations. The arms keep their assigned clip while you try gun clips.
 4. Check the assignment rows beneath the selector. Click an object's row button to change its clip, or **Clear** to remove only that assignment. Preview and scrub to compare the motions together.
 5. Enter a nickname in the naming field below the assignments, then click **Add to export** (or press Enter). A bare `reload` becomes `Gameplay1P_reload`; a full `Gameplay1P_reload` name is accepted. This saves a snapshot of the entity path, name, assigned clip paths and current object names without exporting files.
-6. Open **Export Manager** between Clip details and Preview objects. Choose the output folder, check the entries you want, then **Export selected**. Every new or restored entry starts unchecked. The list stays available even before loading a new entity. Keep Cinema 4D open with Octane and the Avolition bridge enabled for the actual export.
+6. Open **Export Manager** beside **Clip details**. Choose the output folder, check the entries you want, then **Export selected**. Every new or restored entry starts unchecked. The list stays available even before loading a new entity. Keep Cinema 4D open with Octane and the Avolition bridge enabled for the actual export.
 
 All assigned clips start at zero on a shared timeline that spans the longest clip and uses the highest assigned frame rate. Each source clip is sampled at its original rate; shorter clips hold their final pose. Switching the selected object does not change this shared duration. Assignments last while the entity is loaded; loading another entity starts a fresh setup.
 
@@ -196,19 +206,22 @@ The companion was checked against installed Cinema 4D/Octane resources and autom
 
 | Control | Action |
 | --- | --- |
+| Left mouse button and drag | Orbit around the surface under the cursor |
+| Middle mouse button and drag | Pan |
+| Right mouse button and drag | Zoom toward the pivot when dragging up or right, and away when dragging down or left |
 | Hold **1** and drag | Pan |
-| **Alt + right mouse button**, drag horizontally | Zoom; right moves in, left moves out |
-| Hold **2** and drag horizontally | Zoom |
+| Hold **2** and drag | Zoom |
 | Hold **3** and drag | Orbit |
-| Mouse wheel | Zoom |
+| **Alt** and drag with a mouse button | Use the corresponding orbit, pan or zoom control |
+| Mouse wheel | Zoom toward or away from the surface under the cursor |
 | **F** | Frame visible meshes |
 | **Space** | Play or pause |
 | **Left / Right** | Step one animation frame |
 | **Up / Down** | Previous or next clip |
 
-These are Cinema 4D-style navigation shortcuts. Use **Textures**, **Grid**, **Skeleton**, **Wireframe**, and **In-place** to examine motion. In-place holds the root's horizontal position while preserving vertical motion, in the preview only. If an entity contains several rigs, use **Choose object** to choose which receives the next clip.
+Navigation chooses a pivot from the visible surface under the cursor when a gesture begins. A small marker identifies that point during the gesture. Starting in empty space uses the viewing direction at the previous pivot depth. Use **Textures**, **Grid**, **Skeleton**, **Wireframe**, and **In-place** to examine motion. In-place holds the root's horizontal position while preserving vertical motion, in the preview only. If an entity contains several rigs, use **Choose object** to choose which receives the next clip.
 
-**Preview objects** stays in the right panel. The loaded entity is the tree root, with attached models nested under their actual parent models. Each model lists its meshes and a **Skeleton** branch; joints nest according to the skeleton's parent indices. Skeleton-only models remain visible and selectable. Missing or invalid parent links appear at the root rather than being inferred from a model name or bone count.
+Expand **Scene objects** in the right panel to inspect the hierarchy. The loaded entity is the tree root, with attached models nested under their actual parent models. Each model lists its meshes and a **Skeleton** branch; joints nest according to the skeleton's parent indices. Skeleton-only models remain visible and selectable. Missing or invalid parent links appear at the root rather than being inferred from a model name or bone count.
 
 Use **+ / −** to expand or collapse a branch. Skeleton and joint branches start collapsed for gradual exploration; entity and model branches start expanded. Click a model name, or press **Enter** on it, to select its animation target. Clicking a mesh name selects its owning model. Visibility checkboxes affect only the preview; hiding a model's own meshes does not hide its attached children. **Show all / Hide all** affects every loaded mesh.
 
@@ -218,7 +231,7 @@ With focus in the tree, **Up / Down** moves between visible rows; **Home / End**
 
 Expansion survives tab switches and animation changes. Visibility remains while switching clips and resets when loading an entity again. With objects hidden, the count shows visible polygons / total polygons. Hidden parts still retain their animation and attachments, and are included in exports.
 
-Textures and Grid start enabled. Skeleton, In-place and Wireframe start disabled. Wireframe overlays thin black edges on the shaded animated surface. Overwatch exports contain triangles, so their triangulation remains visible. Zoom sensitivity is twice that of version 0.8.1; Alt + right-drag and hold-2 drag still use horizontal movement.
+Textures and Grid start enabled. Skeleton, In-place and Wireframe start disabled. Wireframe overlays thin black edges on the shaded animated surface. Overwatch exports contain triangles, so their triangulation remains visible.
 
 ## Saved labels and settings
 

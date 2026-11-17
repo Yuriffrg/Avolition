@@ -30,10 +30,10 @@ class BridgePluginBundleTests(unittest.TestCase):
         self.assertEqual([p.name for p in output.glob('*.pyp')], ['Avolition C4D Bridge.pyp'])
         self.assertFalse((self.target / 'Whitehound C4D Bridge').exists())
         self.assertTrue((output / 'LICENSE').is_file())
-        for name in ('c4d_bridge.py', 'c4d_scene.py', 'c4d_octane.py', 'c4d_motion.py', 'c4d_pov.py'):
+        for name in ('c4d_bridge.py', 'c4d_scene.py', 'c4d_octane.py', 'c4d_motion.py', 'c4d_pov.py', 'c4d_stager.py'):
             self.assertEqual((output / 'whitehound_c4d' / name).read_bytes(), (SOURCE / 'owpreview' / name).read_bytes())
         readme = (output / 'README.txt').read_text(encoding='utf-8')
-        self.assertIn('Avolition C4D Bridge — 0.7.10', readme)
+        self.assertIn('Avolition C4D Bridge — 0.7.14', readme)
         self.assertIn('renaming an old folder inside plugins does not disable it', readme)
 
     def test_bundle_refuses_legacy_copy_without_deleting_it(self):
@@ -71,7 +71,7 @@ class BridgePluginBundleTests(unittest.TestCase):
         with patch.dict(sys.modules, {'c4d': fake,
             'whitehound_c4d': SimpleNamespace(),
             'whitehound_c4d.c4d_bridge': SimpleNamespace(BridgeService=Service),
-            'whitehound_c4d.c4d_scene': SimpleNamespace(build_scene=lambda *args: None)}), \
+            'whitehound_c4d.c4d_stager': SimpleNamespace(dispatch=lambda *args: None)}), \
                 patch.object(sys, 'path', list(sys.path)), redirect_stdout(stdout):
             entry = runpy.run_path(str(output / 'Avolition C4D Bridge.pyp'), run_name='__main__')
         return output, entry, registrations, services, stdout.getvalue()
@@ -81,9 +81,9 @@ class BridgePluginBundleTests(unittest.TestCase):
         self.assertEqual(len(registrations), 1)
         ident, name, flags, plugin = registrations[0]
         self.assertEqual((ident, name, flags), (PLUGIN_ID, 'Avolition C4D Bridge', 0))
-        expected = dict(bridgeVersion='0.7.10', bridgeName='Avolition C4D Bridge', pluginPath=str(output.resolve()),
+        expected = dict(bridgeVersion='0.7.14', bridgeName='Avolition C4D Bridge', pluginPath=str(output.resolve()),
                         cinemaVersion=2026302, mapInstances=True, motionClips=True, skeletonMotionClips=True, combinedMotionClips=True,
-                        mapTiming24=True, exactFrameTimes=True, optimizedGameplay1P=True, povHeightZero=True, octane=True)
+                        mapTiming24=True, exactFrameTimes=True, optimizedGameplay1P=True, povHeightZero=True, stagerRig=True, octane=True)
         self.assertEqual(entry['capabilities'](), expected)
         self.assertEqual(plugin.GetTimer(), 1000)
         self.assertTrue(plugin.CoreMessage(100, None))

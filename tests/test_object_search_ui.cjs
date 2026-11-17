@@ -1,3 +1,4 @@
+const {openAnimationSetup} = require('./open-animation-setup.cjs');
 // Real backend, format parsers and renderer. WHITEHOUND_EXE selects packaged
 // Electron/native IPC; otherwise run the source HTTP backend. All assets are
 // generated QA fixtures; no game, release request or native C4D export is used.
@@ -164,6 +165,7 @@ async function launchNative() {
     const load = PreviewViewport.prototype.loadAsset;
     PreviewViewport.prototype.loadAsset = function(...args) {window.qaViewport = this; return load.apply(this, args);};
   });
+  await page.locator('#library-filters > summary').click();
   await loadEntity('Alpha/Gameplay1P.owentity', 2);
   assert.equal(await page.locator('#library-object option').count(), 2);
   assert.equal(await page.locator('#library-object').inputValue(), 'model-0');
@@ -193,6 +195,7 @@ async function launchNative() {
   assert.match(await coverage('004_Gun'), /^2 \/ 2 bones covered/);
   assert.match(await coverage('001_Full'), /^0 \/ 2 bones covered/);
   await chooseClip('004_Gun');
+  await openAnimationSetup(page);
   await page.locator('#rig-select').selectOption('model-0');
   assert.equal(await page.locator('#library-object').inputValue(), 'model-0');
   assert.match(await coverage('001_Full'), /^3 \/ 3 bones covered/);
@@ -257,7 +260,7 @@ async function launchNative() {
   await page.locator('#scan-root').click();
   await page.waitForFunction(() => document.querySelector('#clip-count').textContent === '9');
   const saved = JSON.parse(fs.readFileSync(path.join(profile, 'catalog.json'), 'utf8'));
-  assert.deepEqual(saved.libraryOptions, {sort:'name',hideDuplicates:false});
+  assert.deepEqual(saved.libraryOptions, {sort:'name',hideDuplicates:false,hideOriginPoses:true});
   assert.deepEqual(sourceHashes(assets), beforeHashes, 'Scanning, browsing and filtering leave every fixture byte unchanged.');
   assert.deepEqual(errors, []);
   Object.assign(report, {passed:true,occurrences:9,uniqueClips:8,objectBoneCounts:[3,2,4],layout,

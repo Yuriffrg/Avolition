@@ -244,7 +244,7 @@ func TestOldBridgeAndDisconnectionFailBeforeOutputCreation(t *testing.T) {
 	for _, c := range []struct {
 		bridge  *mockBridge
 		pattern string
-	}{{old, `bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.10`}, {disconnected, "disconnected"}} {
+	}{{old, `bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.14`}, {disconnected, "disconnected"}} {
 		output := filepath.Join(root, "never-created")
 		name := "Map"
 		opts := DefaultOptions()

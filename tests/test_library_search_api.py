@@ -50,7 +50,7 @@ class LibrarySearchAPITests(unittest.TestCase):
         self.assertEqual(self.api.read_clip_bindings([]), {'ok': True, 'data': {'clips': []}})
 
     def test_fresh_defaults_agree_between_bootstrap_and_read_only_preferences(self):
-        expected = {'sort': 'object-match', 'hideDuplicates': True}
+        expected = {'sort': 'object-match', 'hideDuplicates': True, 'hideOriginPoses': True}
         self.assertEqual(self.api.library_settings(), {'ok': True, 'data': expected})
         self.assertEqual(self.api.bootstrap()['data']['libraryOptions'], expected)
         self.assertFalse((self.profile / 'catalog.json').exists(), 'Reading defaults must not write the catalog.')
@@ -63,9 +63,9 @@ class LibrarySearchAPITests(unittest.TestCase):
         self.assertTrue(self.api.workflow_settings({'activeTab': 'toolchain'})['ok'])
         original = json.loads((self.profile / 'catalog.json').read_text(encoding='utf-8'))
         first = self.api.library_settings({'sort': 'tracks-desc'})
-        self.assertEqual(first, {'ok': True, 'data': {'sort': 'tracks-desc', 'hideDuplicates': True}})
-        second = self.api.library_settings({'hideDuplicates': False})
-        self.assertEqual(second, {'ok': True, 'data': {'sort': 'tracks-desc', 'hideDuplicates': False}})
+        self.assertEqual(first, {'ok': True, 'data': {'sort': 'tracks-desc', 'hideDuplicates': True, 'hideOriginPoses': True}})
+        second = self.api.library_settings({'hideDuplicates': False, 'hideOriginPoses': False})
+        self.assertEqual(second, {'ok': True, 'data': {'sort': 'tracks-desc', 'hideDuplicates': False, 'hideOriginPoses': False}})
         saved = json.loads((self.profile / 'catalog.json').read_text(encoding='utf-8'))
         self.assertEqual({key: value for key, value in saved.items() if key != 'libraryOptions'}, original)
         restarted = BrowserAPI(self.profile)
@@ -81,15 +81,15 @@ class LibrarySearchAPITests(unittest.TestCase):
                  'size-desc', 'size-asc', 'duration-desc', 'duration-asc')
         for sort in sorts:
             result = self.api.library_settings({'sort': sort})
-            self.assertEqual(result, {'ok': True, 'data': {'sort': sort, 'hideDuplicates': True}})
+            self.assertEqual(result, {'ok': True, 'data': {'sort': sort, 'hideDuplicates': True, 'hideOriginPoses': True}})
 
     def test_bad_preference_values_preserve_saved_and_in_memory_state(self):
-        self.assertTrue(self.api.library_settings({'sort': 'name', 'hideDuplicates': False})['ok'])
+        self.assertTrue(self.api.library_settings({'sort': 'name', 'hideDuplicates': False, 'hideOriginPoses': True})['ok'])
         original = (self.profile / 'catalog.json').read_bytes()
         expected = self.api.library_settings()
         invalid = [[], 'name', 42, {'unknown': True}, {'sort': 'guess-action'}, {'sort': None},
                    {'sort': []}, {'sort': {}}, {'hideDuplicates': 0}, {'hideDuplicates': 1},
-                   {'hideDuplicates': 'false'}, {'hideDuplicates': None},
+                   {'hideDuplicates': 'false'}, {'hideDuplicates': None}, {'hideOriginPoses': 0},
                    {'sort': 'tracks-desc', 'hideDuplicates': 'true'}]
         for changes in invalid:
             with self.subTest(changes=changes):
@@ -112,7 +112,7 @@ class LibrarySearchAPITests(unittest.TestCase):
                 (profile / 'catalog.json').write_text(json.dumps(catalog), encoding='utf-8')
                 before = (profile / 'catalog.json').read_bytes()
                 api = BrowserAPI(profile)
-                self.assertEqual(api.library_settings()['data'], {'sort': 'object-match', 'hideDuplicates': True})
+                self.assertEqual(api.library_settings()['data'], {'sort': 'object-match', 'hideDuplicates': True, 'hideOriginPoses': True})
                 self.assertEqual(api.bootstrap()['data']['catalog'], catalog['annotations'])
                 self.assertEqual(api.bootstrap()['data']['outputFolder'], catalog['outputFolder'])
                 self.assertEqual((profile / 'catalog.json').read_bytes(), before)

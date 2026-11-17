@@ -118,7 +118,7 @@ func TestMapDispatchRechecksCapabilityBeforeCreatingAJob(t *testing.T) {
 		t.Fatal("status")
 	}
 	_, err := bridge.Export(obj("mapInstances", true), filepath.Join(root, "out.c4d"), filepath.Join(root, "tex"), ExportOptions{})
-	if err == nil || !regexp.MustCompile(`bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.10`).MatchString(err.Error()) {
+	if err == nil || !regexp.MustCompile(`bridge 0\.7\.2.*Avolition C4D Bridge 0\.7\.14`).MatchString(err.Error()) {
 		t.Fatalf("error %v", err)
 	}
 	if exists(filepath.Join(queue, "jobs")) || exists(filepath.Join(root, "out.c4d")) {
@@ -171,7 +171,7 @@ func TestRequiredFeatureCapabilitiesAreCheckedBeforeCreatingAJob(t *testing.T) {
 					return status
 				}
 				_, err := bridge.Export(scenario.payload, filepath.Join(root, "out.c4d"), filepath.Join(root, "tex"), ExportOptions{})
-				if err == nil || !strings.Contains(err.Error(), "updated motion clip and map timing support") || !strings.Contains(err.Error(), "0.7.10") {
+				if err == nil || !strings.Contains(err.Error(), "updated motion clip and map timing support") || !strings.Contains(err.Error(), "0.7.14") {
 					t.Fatalf("advertised=%v: %v", advertised, err)
 				}
 				if exists(queue) || exists(filepath.Join(root, "out.c4d")) {
@@ -203,7 +203,7 @@ func TestFeatureDispatchAndLegacyPayloadCompatibility(t *testing.T) {
 				status.Set("bridgeVersion", "0.7.5")
 				for _, capability := range scenario.capabilities {
 					status.Set(capability, true)
-					status.Set("bridgeVersion", "0.7.10")
+					status.Set("bridgeVersion", "0.7.11")
 				}
 				return status
 			}

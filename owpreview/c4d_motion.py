@@ -148,6 +148,14 @@ def create_motion_clips(c4d, doc, name, duration, rigs):
     clip[c4d.ID_MT_CLIP_SOURCE] = source
     clip[c4d.ID_MT_CLIP_START] = c4d.BaseTime(0)
     clip[c4d.ID_MT_CLIP_END] = end
+    # Cinema's default Timing spline is a Bezier identity. Its numerical
+    # inversion shifts source samples off their keys, which becomes visible on
+    # fast finger/attachment motion. Linear knots retain the exact identity
+    # mapping, including 60 FPS source frames, without changing any key times.
+    timing = c4d.SplineData()
+    if not timing.MakeLinearSplineLinear(2):
+        raise RuntimeError('Cinema 4D could not create the Motion Clip timing spline.')
+    clip[c4d.ID_MT_CLIP_TIMWARPWND] = timing
     for obj in members:
         for track in list(_tracks(obj)):
             if _included(c4d, track):

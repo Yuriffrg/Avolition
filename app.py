@@ -39,7 +39,7 @@ API_METHODS = ('bootstrap', 'browse_root', 'browse_output', 'set_output_folder',
                'toolchain_status', 'toolchain_check', 'toolchain_install', 'toolchain_validate', 'toolchain_list',
                'toolchain_start', 'toolchain_cancel', 'analysis_start', 'analysis_status', 'analysis_index', 'analysis_detail',
                'read_clip_bindings', 'library_settings', 'export_queue_save', 'export_queue_remove',
-               'export_queue_run', 'open_export_output', 'maps_settings', 'scan_maps', 'load_map', 'export_map',
+               'export_queue_run', 'stager_rig_destination', 'create_stager_rig', 'open_export_output', 'maps_settings', 'scan_maps', 'load_map', 'export_map',
                'export_map_start', 'export_map_status', 'browse_map', 'open_map_output', 'object_names', 'save_object_name')
 
 
@@ -213,7 +213,7 @@ class BrowserAPI:
                 'exportQueue': queue,
                 'maps': self._map_settings(),
                 'mapExport': self._map_exports.snapshot(),
-                'version': '0.8.29', 'appName': 'Avolition', 'browserMode': not self._desktop_mode}
+                'version': '0.8.35', 'appName': 'Avolition', 'browserMode': not self._desktop_mode}
 
     def _map_settings(self):
         saved = self._catalog.get('maps', {})
@@ -399,28 +399,31 @@ class BrowserAPI:
         sorts = ('object-match', 'tracks-desc', 'tracks-asc', 'name', 'nicknamed-first',
                  'size-desc', 'size-asc', 'duration-desc', 'duration-asc')
         return {'sort': saved.get('sort') if saved.get('sort') in sorts else 'object-match',
-                'hideDuplicates': saved.get('hideDuplicates', True) is not False}
+                'hideDuplicates': saved.get('hideDuplicates', True) is not False,
+                'hideOriginPoses': saved.get('hideOriginPoses', True) is not False}
 
     @reply
     def library_settings(self, changes=None):
         with self._lock:
             options = self._library_options()
             if changes is not None:
-                if not isinstance(changes, dict) or set(changes) - {'sort', 'hideDuplicates'}:
+                if not isinstance(changes, dict) or set(changes) - {'sort', 'hideDuplicates', 'hideOriginPoses'}:
                     raise ValueError('Invalid animation library settings.')
                 if 'sort' in changes and changes['sort'] not in ('object-match', 'tracks-desc', 'tracks-asc',
                         'name', 'nicknamed-first', 'size-desc', 'size-asc', 'duration-desc', 'duration-asc'):
                     raise ValueError('Unknown animation sorting option.')
                 if 'hideDuplicates' in changes and not isinstance(changes['hideDuplicates'], bool):
                     raise ValueError('Hide duplicates must be on or off.')
+                if 'hideOriginPoses' in changes and not isinstance(changes['hideOriginPoses'], bool):
+                    raise ValueError('Hide near-origin poses must be on or off.')
                 options.update(changes)
                 self._catalog['libraryOptions'] = options
                 self._save()
             return options
 
     @reply
-    def read_clip_bindings(self, paths):
-        return self._clip_bindings.read(paths)
+    def read_clip_bindings(self, paths, pose_bones=None):
+        return self._clip_bindings.read(paths, pose_bones)
 
     @staticmethod
     def _motion_clip_name(value):
@@ -579,6 +582,14 @@ class BrowserAPI:
         finally:
             with self._queue_activity_lock:
                 self._queue_running.discard(ident)
+
+    @reply
+    def stager_rig_destination(self, ids):
+        raise RuntimeError('Create Stager rig requires the Avolition desktop Go core.')
+
+    @reply
+    def create_stager_rig(self, request):
+        raise RuntimeError('Create Stager rig requires the Avolition desktop Go core.')
 
     @reply
     def open_export_output(self):

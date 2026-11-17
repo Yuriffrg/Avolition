@@ -39,7 +39,7 @@ const (
 	SetupMessage = "C4D export needs Cinema 4D with Octane and the included Avolition C4D Bridge. " +
 		"Copy the Avolition C4D Bridge folder from this download into Cinema 4D's " +
 		"plugins folder, restart Cinema 4D, then export again. Keep Cinema 4D open."
-	MapBridgeMessageText = "Install the bundled Avolition C4D Bridge 0.7.10, replacing the old bridge " +
+	MapBridgeMessageText = "Install the bundled Avolition C4D Bridge 0.7.14, replacing the old bridge " +
 		"copy, then restart Cinema 4D with Octane. Keep only one bridge installed."
 	FeatureBridgeMessage = "This export needs the updated motion clip and map timing support. " + MapBridgeMessageText
 )
@@ -279,7 +279,10 @@ type liveStatus struct {
 }
 
 // Status reports the best live Cinema 4D instance.
-func (c *Client) Status() *Status {
+func (c *Client) Status() *Status { return c.liveStatus("") }
+
+// liveStatus pins reviewed Stager requests to the same running Cinema instance.
+func (c *Client) liveStatus(instanceID string) *Status {
 	if c.statusFunc != nil {
 		return c.statusFunc()
 	}
@@ -299,7 +302,7 @@ func (c *Client) Status() *Status {
 		}
 		instance, _ := fields.Get("instance")
 		var text string
-		if json.Unmarshal(instance, &text) != nil || text == "" {
+		if json.Unmarshal(instance, &text) != nil || text == "" || (instanceID != "" && text != instanceID) {
 			continue
 		}
 		raw, ok := fields.Get("heartbeat")
@@ -316,7 +319,7 @@ func (c *Client) Status() *Status {
 		octane, _ := fields.Get("octane")
 		maps, _ := fields.Get("mapInstances")
 		features := 0
-		for _, capability := range []string{"motionClips", "skeletonMotionClips", "combinedMotionClips", "exactFrameTimes", "optimizedGameplay1P", "povHeightZero", "mapTiming24"} {
+		for _, capability := range []string{"motionClips", "skeletonMotionClips", "combinedMotionClips", "exactFrameTimes", "optimizedGameplay1P", "povHeightZero", "mapTiming24", "stagerRig"} {
 			value, _ := fields.Get(capability)
 			if string(value) == "true" {
 				features++
@@ -374,6 +377,10 @@ func better(a, b liveStatus) bool {
 type ExportOptions struct {
 	// Timeout in seconds; nil selects 30 minutes for map payloads, else 150 s.
 	Timeout *float64
+	// Stager requests return a result in-place, without publishing scene.c4d.
+	Stager bool
+	// Instance is the reviewed instance ID, required for scene mutations.
+	Instance string
 	// MapInstances must be bool(payload.get('mapInstances')). It is detected
 	// automatically for map[string]any and ordered.Map payloads.
 	MapInstances bool
@@ -465,7 +472,13 @@ func (c *Client) Export(payload any, destination, textureFolder string, options 
 	} else if mapInstances {
 		timeout = MapExportTimeout
 	}
-	status := c.Status()
+	status := c.liveStatus(options.Instance)
+	if options.Instance != "" && status.Instance() != options.Instance {
+		return nil, runtimeError("The reviewed Cinema 4D instance is no longer available. Review the destination again.")
+	}
+	if options.Stager && status.Connected() && !status.isTrue("stagerRig") {
+		return nil, runtimeError("Create Stager rig needs Avolition C4D Bridge 0.7.14 and the Avolition Stager plugin. Open Cinema 4D with both plugins loaded.")
+	}
 	if !status.Connected() {
 		return nil, runtimeError(SetupMessage)
 	}
@@ -561,6 +574,13 @@ func (c *Client) Export(payload any, destination, textureFolder string, options 
 					message = pyStr(value)
 				}
 				return nil, runtimeError(message)
+			}
+			if options.Stager {
+				value, present := result.Get("data")
+				if !present || len(value) == 0 || value[0] != '{' {
+					return nil, runtimeError("The Cinema 4D bridge returned an invalid Stager result.")
+				}
+				return value, nil
 			}
 			scene := filepath.Join(job, "scene.c4d")
 			if info, err := os.Stat(scene); err != nil || !info.Mode().IsRegular() || info.Size() == 0 {

@@ -95,6 +95,11 @@ func ReadClipHeader(path string) (*ClipHeader, error) {
 // frame numbers and numeric key values are deliberately not decoded here.
 // Playback's full parser still validates those values when a clip is loaded.
 func ReadClipBindingMetadata(path string) (*ClipBindingMetadata, error) {
+	return ReadClipBindingPose(path, nil)
+}
+
+// ReadClipBindingPose also samples the requested skeleton ancestors at frame zero.
+func ReadClipBindingPose(path string, wanted map[string]bool) (*ClipBindingMetadata, error) {
 	path, err := CheckPath(path, ".owanimclip")
 	if err != nil {
 		return nil, err
@@ -120,6 +125,10 @@ func ReadClipBindingMetadata(path string) (*ClipBindingMetadata, error) {
 	if err != nil {
 		return nil, err
 	}
+	var pose []ClipBone
+	if len(wanted) != 0 {
+		pose = []ClipBone{}
+	}
 	names := make([]string, 0, header.BoneCount)
 	seen := make(map[string]struct{}, header.BoneCount)
 	warnings := []string{}
@@ -140,6 +149,7 @@ func ReadClipBindingMetadata(path string) (*ClipBindingMetadata, error) {
 		if err := r.Count(int64(trackCount), 16, "track count"); err != nil {
 			return nil, err
 		}
+		bone := ClipBone{Name: name}
 		var known [3]bool
 		for t := uint32(0); t < trackCount; t++ {
 			kind, keyCount, components, err := readTrackHeader(r)
@@ -161,20 +171,69 @@ func ReadClipBindingMetadata(path string) (*ClipBindingMetadata, error) {
 			if bytes > r.Remaining() {
 				return nil, r.Fail("truncated keyframe array: requires " + Commas(bytes) + " bytes")
 			}
-			if err := r.Skip(bytes); err != nil {
+			if wanted[name] && kind < 3 && keyCount > 0 {
+				track, err := readFirstKey(r, int(keyCount), int(components), kind == 1)
+				if err != nil {
+					return nil, err
+				}
+				slot := [3]**Track{&bone.Positions, &bone.Rotations, &bone.Scales}[kind]
+				*slot = track
+			} else if err := r.Skip(bytes); err != nil {
 				return nil, err
 			}
 		}
+		if bone.Positions != nil || bone.Rotations != nil || bone.Scales != nil {
+			pose = append(pose, bone)
+		}
 	}
-	if info, err := file.Stat(); err != nil {
+	if after, err := file.Stat(); err != nil {
 		return nil, PythonOSError(err)
-	} else if info.Size() != size {
+	} else if after.Size() != size || !after.ModTime().Equal(info.ModTime()) {
 		return nil, r.Fail("file changed while reading animation metadata; scan again")
 	}
 	if r.Remaining() > 0 {
 		warnings = append(warnings, "Ignored "+Commas(r.Remaining())+" trailing bytes from clip version "+header.Version+".")
 	}
-	return &ClipBindingMetadata{Path: path, BoneNames: names, BoneCount: header.BoneCount, Warnings: warnings}, nil
+	return &ClipBindingMetadata{Path: path, BoneNames: names, BoneCount: header.BoneCount, Warnings: warnings, FirstPose: pose}, nil
+}
+
+// Frame zero holds the earliest key, including when a channel starts later.
+// Use bounded reads and keep the final occurrence if frames repeat.
+func readFirstKey(r *Reader, count, components int, rotation bool) (*Track, error) {
+	stride := (components + 1) * 4
+	var first uint32 = math.MaxUint32
+	values := make([]float64, components)
+	for count > 0 {
+		n := min(count, 1024)
+		raw, err := r.Take(n * stride)
+		if err != nil {
+			return nil, err
+		}
+		for i := 0; i < len(raw); i += stride {
+			frame := binary.LittleEndian.Uint32(raw[i:])
+			if frame > first {
+				continue
+			}
+			first = frame
+			for j := range values {
+				values[j] = float64(math.Float32frombits(binary.LittleEndian.Uint32(raw[i+4+j*4:])))
+			}
+		}
+		count -= n
+	}
+	if err := r.Count(int64(first), 100_000_000, "keyframe frame number"); err != nil {
+		return nil, err
+	}
+	for _, x := range values {
+		if math.IsNaN(x) || math.IsInf(x, 0) {
+			return nil, r.Fail("non-finite numeric value")
+		}
+	}
+	if rotation {
+		q := NormalizeQuaternion([4]float64(values))
+		copy(values, q[:])
+	}
+	return &Track{Frames: []uint32{first}, Values: values}, nil
 }
 
 func readTrackHeader(r *Reader) (kind, keyCount, components uint32, err error) {

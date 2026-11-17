@@ -555,10 +555,12 @@ func countMatches(bones []formats.Bone, names map[string]bool) int {
 // lastFrame is int(clip.get('lastFrame', clip.get('durationFrames', 1) - 1)).
 func lastFrame(clip *formats.Clip) int64 { return clip.LastFrame }
 
+type nonuniformScaleError struct{ error }
+
 // bakeTracks samples every frame of a model's rig into local matrices.
 // frameSource maps an output frame to the clip frame.
 func bakeTracks(model *formats.Model, evaluator *exportpose.Evaluator, last int64, rootMotion bool,
-	frameSource func(int64) float64, fail func(index int, frame int64) error) ([]Track, error) {
+	staticWorldScales [][3]float64, frameSource func(int64) float64, fail func(index int, frame int64) error) ([]Track, error) {
 	tracks := make([]Track, len(model.Bones))
 	for i := range tracks {
 		tracks[i] = Track{ModelID: model.ID, BoneIndex: i, Frames: make([]formats.Mat4, 0, last+1)}
@@ -566,6 +568,17 @@ func bakeTracks(model *formats.Model, evaluator *exportpose.Evaluator, last int6
 	pose := evaluator.NewPose()
 	for frame := int64(0); frame <= last; frame++ {
 		evaluator.EvaluateInto(pose, frameSource(frame), !rootMotion)
+		// The game evaluates child pivots using the animated parent scale but
+		// assigns each bone its own world scale. Keep those evaluated pivots
+		// and rotations when baking a position/rotation-only Motion Source.
+		for i, scale := range staticWorldScales {
+			for col := range scale {
+				ratio := scale[col] / pose.Scales[i][col]
+				for row := 0; row < 3; row++ {
+					pose.World[i][row][col] *= ratio
+				}
+			}
+		}
 		for i := range tracks {
 			parent := evaluator.Parents[i]
 			local := pose.World[i]
@@ -577,7 +590,7 @@ func bakeTracks(model *formats.Model, evaluator *exportpose.Evaluator, last int6
 				local = inverse.Mul(&pose.World[i])
 			}
 			if _, _, _, err := exportpose.Decompose(&local); err != nil {
-				return nil, fail(i, frame)
+				return nil, nonuniformScaleError{fail(i, frame)}
 			}
 			tracks[i].Frames = append(tracks[i].Frames, local.ColumnMajor())
 		}
@@ -670,7 +683,7 @@ func MakePayload(asset *formats.Asset, clip *formats.Clip, materials *Materials,
 	if err != nil {
 		return nil, err
 	}
-	tracks, err := bakeTracks(selected, evaluator, last, opts.RootMotion,
+	tracks, err := bakeTracks(selected, evaluator, last, opts.RootMotion, nil,
 		func(frame int64) float64 { return float64(frame) },
 		func(index int, frame int64) error {
 			return valueError("C4D cannot represent this clip's nonuniform scale without extra hierarchy nodes (" +
@@ -705,10 +718,13 @@ type Assignment struct {
 // SetOptions are make_set_payload's keyword arguments (Python defaults:
 // IncludeMesh and RootMotion true, Name "Animation set").
 type SetOptions struct {
-	IncludeMesh    bool
-	RootMotion     bool
-	Name           string
-	MotionClipName string
+	// BakeScaleToJointPositions allows position/rotation-only Actor libraries
+	// to keep joint trajectories when animated scale introduces local shear.
+	BakeScaleToJointPositions bool
+	IncludeMesh               bool
+	RootMotion                bool
+	Name                      string
+	MotionClipName            string
 }
 
 // DefaultSetOptions are Python's keyword defaults.
@@ -833,6 +849,7 @@ func MakeSetPayload(asset *formats.Asset, assignments []Assignment, materials *M
 		return nil, valueError("Native C4D export exceeds 250,000 sampled bone frames. Choose shorter clips.")
 	}
 	var tracks []Track
+	var scaleWarnings []string
 	summaries := make([]AssignmentSummary, 0, len(prepared))
 	matchedTotal := 0
 	for _, item := range prepared {
@@ -842,13 +859,22 @@ func MakeSetPayload(asset *formats.Asset, assignments []Assignment, materials *M
 			return nil, err
 		}
 		itemFPS, itemLast := item.fps, float64(item.last)
-		modelTracks, err := bakeTracks(model, evaluator, last, opts.RootMotion,
-			func(frame int64) float64 { return math.Min(itemLast, float64(frame)/fps*itemFPS) },
-			func(index int, frame int64) error {
-				return valueError("C4D cannot represent this clip's nonuniform scale without extra hierarchy nodes (" +
-					model.Name + ", " + model.Bones[index].Name + ", frame " + strconv.FormatInt(frame, 10) +
-					"). The original hierarchy has been retained.")
-			})
+		sourceFrame := func(frame int64) float64 { return math.Min(itemLast, float64(frame)/fps*itemFPS) }
+		fail := func(index int, frame int64) error {
+			return valueError("C4D cannot represent this clip's nonuniform scale without extra hierarchy nodes (" +
+				model.Name + ", " + model.Bones[index].Name + ", frame " + strconv.FormatInt(frame, 10) +
+				"). The original hierarchy has been retained.")
+		}
+		modelTracks, err := bakeTracks(model, evaluator, last, opts.RootMotion, nil, sourceFrame, fail)
+		var shear nonuniformScaleError
+		if opts.BakeScaleToJointPositions && errors.As(err, &shear) {
+			scales := evaluator.Evaluate(0, !opts.RootMotion).Scales
+			modelTracks, err = bakeTracks(model, evaluator, last, opts.RootMotion, scales, sourceFrame, fail)
+			if err == nil {
+				scaleWarnings = append(scaleWarnings, opts.Name+" ("+model.Name+
+					"): held animated scale at frame zero and baked its effect on joint positions. Direct scale deformation is omitted.")
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -869,7 +895,7 @@ func MakeSetPayload(asset *formats.Asset, assignments []Assignment, materials *M
 		motionName = opts.Name
 	}
 	gameplay1P, heroName := SourceIdentity(asset.Path)
-	return &Payload{Version: 1, Asset: native, Materials: orEmpty(materials), Warnings: copyStrings(native.Warnings),
+	return &Payload{Version: 1, Asset: native, Materials: orEmpty(materials), Warnings: append(copyStrings(native.Warnings), scaleWarnings...),
 		IncludeMesh: opts.IncludeMesh, Name: opts.Name, MotionClip: len(tracks) > 0, MotionClipName: motionName,
 		Gameplay1P: gameplay1P, HeroName: heroName,
 		Animation: Animation{FPS: fps, LastFrame: last, DurationSeconds: &duration, Tracks: tracks,

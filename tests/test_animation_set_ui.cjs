@@ -1,3 +1,4 @@
+const {openAnimationSetup} = require('./open-animation-setup.cjs');
 // Production renderer/backend on real, read-only Widowmaker files. Only native
 // Cinema 4D export responses are mocked; this is not a native C4D round trip.
 const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -62,7 +63,12 @@ async function until(check, description, ms=30000) {
   await page.waitForFunction(()=>!document.querySelector('#scan-root').disabled);
   assert.equal(await page.locator('#toolchain-directories').isVisible(),false,'Game installation/output controls belong only to Toolchain.');
   assert.equal(await page.locator('#animation-evidence, #analyze-library, #analysis-filters').count(),0,'Evidence controls are removed.');
+  assert.ok(await page.locator('#root-path').isVisible());
+  assert.ok(await page.locator('.inspector-panel #setup-menu').isVisible());
+  assert.ok(await page.locator('#objects-list').isHidden());
+  assert.ok(await page.locator('#workflow-animations > .source-bar').isVisible());
   await page.locator('#tab-toolchain').click();
+  assert.ok(await page.locator('#root-path').isHidden());
   assert.equal(await page.locator('#toolchain-directories').isVisible(),true);
   await page.locator('#overwatch-install').fill('D:\\Game path 日本語');
   await page.locator('#overwatch-install').blur();
@@ -79,7 +85,9 @@ async function until(check, description, ms=30000) {
   });
   await page.locator('#entity-select').selectOption(entity);await page.locator('#load-entity').click();
   await page.waitForFunction(()=>window.qaViewport?.models.length && document.querySelector('#viewport-loading').hidden);
+  await page.locator('#clip-details > summary').click();
   const choose=async(source, modelId, match)=>{
+    await openAnimationSetup(page);
     await page.locator('#rig-select').selectOption(modelId);
     await page.locator('#clip-search').fill(path.basename(source,'.owanimclip'));
     await page.locator('.clip-row').first().click();
@@ -89,12 +97,15 @@ async function until(check, description, ms=30000) {
   };
   await choose(arms,'model-0',/85 \/ 93 tracks matched/);
   await choose(gun,'model-1',/18 \/ 19 tracks matched/);
+  assert.equal(await page.locator('#setup-count').innerText(),'2');
+  await openAnimationSetup(page);
   assert.match(await page.locator('#animation-set').innerText(),/000000000156/);
   assert.match(await page.locator('#animation-set').innerText(),/000000003879/);
   const assigned=()=>page.evaluate(()=>window.qaViewport.assignments.map(entry=>({modelId:entry.modelId,path:entry.clip.path})));
   const expected=[{modelId:'model-0',path:arms},{modelId:'model-1',path:gun}];
   assert.deepEqual(await assigned(),expected);
   for(const modelId of ['model-0','model-1']){
+    await openAnimationSetup(page);
     await page.locator('#rig-select').selectOption(modelId);
     assert.equal(await page.locator('#timeline').getAttribute('max'),'45','Longer gun clip remains reachable while browsing arms.');
     assert.equal(await page.locator('#total-time').innerText(),'1.50 s');
@@ -111,6 +122,7 @@ async function until(check, description, ms=30000) {
     });
     assert.ok(error<1e-8,'Short arms hold frame21; gun reaches frame45.');
   }
+  await openAnimationSetup(page);
   await page.locator('#animation-set-name').fill('matched_reload 日本語');
   await page.locator('#export-animation-set').click();
   await page.waitForFunction(()=>!document.querySelector('#export-animation-set').disabled
@@ -124,6 +136,7 @@ async function until(check, description, ms=30000) {
   assert.deepEqual(entry.assignments,[{modelId:'model-0',clipPath:arms},{modelId:'model-1',clipPath:gun}]);
   await page.locator('#fbx-options-button').click();
   const queued=page.locator(`.export-queue-row[data-export-id="${entry.id}"]`);
+  await page.locator('#export-files-tab').click();
   assert.equal(await queued.locator('.export-queue-check').isChecked(),false);
   await page.locator('#output-path').fill(output);await page.locator('#output-path').blur();
   await queued.locator('.export-queue-check').check();
@@ -148,11 +161,13 @@ async function until(check, description, ms=30000) {
   await page.locator('#close-export-menu').click();
   assert.deepEqual(await assigned(),expected,'Tab switching and export retain both assignments.');
 
+  await openAnimationSetup(page);
   await page.locator('#animation-set-name').fill('not_added');await page.locator('#animation-set-name').blur();
   await pause(700);
   assert.equal(combinedRequests.length,1,'Editing a name does not implicitly export it.');
   const unchangedQueue=await page.evaluate(()=>window.pywebview.api.bootstrap());
   assert.deepEqual(unchangedQueue.data.exportQueue,[entry]);
+  await openAnimationSetup(page);
   await page.locator('#rig-select').selectOption('model-0');
   holdClip=arms;
   await page.locator('#clip-search').fill('000000000156');

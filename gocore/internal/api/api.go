@@ -33,7 +33,7 @@ import (
 )
 
 // Version is the application version reported by bootstrap.
-const Version = "0.8.29"
+const Version = "0.8.35"
 
 // MaxExportQueue is MAX_EXPORT_QUEUE.
 const MaxExportQueue = 1000

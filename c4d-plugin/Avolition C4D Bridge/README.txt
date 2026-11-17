@@ -1,4 +1,9 @@
-Avolition C4D Bridge — 0.7.10
+Avolition C4D Bridge — 0.7.14
+
+To repair an existing Stager rig, use this bridge with Avolition Stager 0.19.1.
+Open Export Manager, select the original named setups, and choose Create Stager rig.
+Review the destination project and click Repair rig. Refresh scene in Stager.
+Repair uses one Cinema 4D Undo.
 
 Animations use their source FPS (the highest assigned FPS in a combined setup).
 Keys and Motion Clip ranges retain exact whole frames at 30/60 FPS.
@@ -29,8 +34,10 @@ Static scenes are evaluated once before saving and once after reopening for
 verification. Avolition 0.8.18 shows background map export progress and allows
 up to 30 minutes for a native map save after Cinema starts processing it.
 
+Newly imported Actor skin weights use Cinema 4D's 16-bit weight precision while preserving a total of one per vertex. This lets Stager recognize the native linear skins on the full Widowmaker Actor during Refresh. Re-importing a registered rig keeps its existing Weight tags.
+
 UPDATE FROM AN EARLIER BRIDGE
-1. Close Cinema 4D.
+1. Save your projects and close Cinema 4D.
 2. Move the old "Whitehound C4D Bridge" folder out of every Cinema 4D plugins
    folder or custom plugin search path. Keep any backup outside those paths;
    renaming an old folder inside plugins does not disable it.
@@ -55,7 +62,7 @@ Re-export the animation to create a corrected .c4d scene. Existing scenes
 are not modified. A reused nickname may receive a numbered suffix.
 
 SETUP (once)
-1. Close Cinema 4D.
+1. Save your projects and close Cinema 4D.
 2. Copy this entire "Avolition C4D Bridge" folder into your Cinema 4D
    plugins folder, beside Overwatch Entities. Keep whitehound_c4d inside it.
 3. Start Cinema 4D with Octane enabled. The bridge runs automatically.
@@ -74,7 +81,7 @@ entity/model/skeleton hierarchy, centimetre geometry, skin weights,
 sampled position/rotation animation and editable Octane Universal materials. Static maps
 contain no invented animation tracks. C4D uses Y up. Keep tex with the scene.
 
-The bridge creates, verifies and closes a separate document. It does not
+For file exports the bridge creates, verifies and closes a separate document. It does not
 modify, save or replace the scene you are editing. Files in the output
 folder are published only after the requested exports succeed.
 
@@ -86,6 +93,13 @@ This is an initial Octane setup for feedback, not a complete reproduction
 of every proprietary game shader. Unsupported emission masks are reported.
 Zero-scale or sheared native local transforms fail explicitly to preserve the
 hierarchy and transforms.
+
+CREATE STAGER RIG
+Select named animation setups in Avolition and choose Create Stager rig.
+Review the document, camera and assignments before inserting. The bridge
+builds a detached candidate then inserts and registers it in a single Undo.
+Its baked textures live under %LOCALAPPDATA%/Avolition/Stager/textures.
+Use Save Project with Assets when transferring the project to another machine.
 
 Private prototype plugin ID: 1066202606. Source license: GPL-3.0-or-later.
 Cinema 4D and Octane binaries are not included.

@@ -39,7 +39,7 @@ type DuplicateIndex interface {
 // ClipBindings is clip_bindings.ClipBindingIndex.
 type ClipBindings interface {
 	// Read is read(paths) with the raw request value.
-	Read(paths any) (any, error)
+	Read(paths, poseBones any) (any, error)
 }
 
 // ObjectNames is object_names.

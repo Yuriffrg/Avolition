@@ -386,27 +386,9 @@ func (a *API) ExportAnimationSet(entityPath, assignments, sceneName, outputFolde
 	if err != nil {
 		return nil, err
 	}
-	var captured []c4dexport.Assignment
-	seen := map[string]bool{}
-	for _, item := range list {
-		assignment, ok := dictOf(item)
-		if !ok {
-			return nil, newValueError("Invalid animation assignment.")
-		}
-		modelID, isString := get(assignment, "modelId").(string)
-		if !isString || modelID == "" || runeLen(modelID) > 128 || seen[modelID] {
-			return nil, newValueError("Each loaded object must have one unique animation assignment.")
-		}
-		clipPath, isString := get(assignment, "clipPath").(string)
-		if !isString || !pycompat.IsAbs(clipPath) || pyLower(pypath.Suffix(clipPath)) != ".owanimclip" {
-			return nil, newValueError("Each assigned animation must be an existing .owanimclip file.")
-		}
-		seen[modelID] = true
-		clip, err := a.deps.LoadClip(clipPath)
-		if err != nil {
-			return nil, err
-		}
-		captured = append(captured, c4dexport.Assignment{ModelID: modelID, Clip: clip})
+	captured, err := a.loadSetAssignments(list)
+	if err != nil {
+		return nil, err
 	}
 	entity := entityPath.(string)
 	asset, err := a.deps.LoadAsset(entity, root)
@@ -476,4 +458,30 @@ func (a *API) ExportAnimationSet(entityPath, assignments, sceneName, outputFolde
 		return nil, err
 	}
 	return result, nil
+}
+
+func (a *API) loadSetAssignments(list []any) ([]c4dexport.Assignment, error) {
+	var captured []c4dexport.Assignment
+	seen := map[string]bool{}
+	for _, item := range list {
+		assignment, ok := dictOf(item)
+		if !ok {
+			return nil, newValueError("Invalid animation assignment.")
+		}
+		modelID, isString := get(assignment, "modelId").(string)
+		if !isString || modelID == "" || runeLen(modelID) > 128 || seen[modelID] {
+			return nil, newValueError("Each loaded object must have one unique animation assignment.")
+		}
+		clipPath, isString := get(assignment, "clipPath").(string)
+		if !isString || !pycompat.IsAbs(clipPath) || pyLower(pypath.Suffix(clipPath)) != ".owanimclip" {
+			return nil, newValueError("Each assigned animation must be an existing .owanimclip file.")
+		}
+		seen[modelID] = true
+		clip, err := a.deps.LoadClip(clipPath)
+		if err != nil {
+			return nil, err
+		}
+		captured = append(captured, c4dexport.Assignment{ModelID: modelID, Clip: clip})
+	}
+	return captured, nil
 }

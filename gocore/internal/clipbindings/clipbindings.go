@@ -97,17 +97,20 @@ func normcase(path string) string {
 	return path
 }
 
-func (x *Index) readOne(path string) ([]string, error) {
+func sourcePath(path string) (string, error) {
 	if path == "" || utf8.RuneCountInString(path) > 32767 {
-		return nil, errFullPath
+		return "", errFullPath
 	}
 	if !pypath.IsAbs(path) || strings.ToLower(pypath.Suffix(path)) != ".owanimclip" {
-		return nil, errFullPath
+		return "", errFullPath
 	}
+	return filepath.Clean(path), nil
+}
+
+func (x *Index) readOne(source string) ([]string, error) {
 	// Cache hits need one stat, not another filesystem path-resolution walk.
 	// Symlink spellings may occupy separate entries; fingerprints still
 	// describe the target file and each request retains its original key.
-	source := filepath.Clean(path) // os.path.abspath of an absolute path
 	key := normcase(source)
 	before, err := fingerprint(source)
 	if err != nil {
@@ -164,9 +167,28 @@ func (x *Index) remove(element *list.Element) {
 // Clip is one result: the original path string (null for a non-string
 // request) and its bone names, or null names and an error.
 type Clip struct {
-	Path      *string  `json:"path"`
-	BoneNames []string `json:"boneNames"`
-	Error     string   `json:"error,omitempty"`
+	FirstPose *[]formats.ClipBone `json:"firstPose,omitempty"`
+	Path      *string             `json:"path"`
+	BoneNames []string            `json:"boneNames"`
+	Error     string              `json:"error,omitempty"`
+}
+
+// readClip returns just the cached names on an ordinary lookup. A pose request
+// streams its chosen ancestors and returns one sample per populated channel.
+func (x *Index) readClip(path string, wanted map[string]bool) (Clip, error) {
+	source, err := sourcePath(path)
+	if err != nil {
+		return Clip{}, err
+	}
+	if len(wanted) == 0 {
+		names, err := x.readOne(source)
+		return Clip{Path: &path, BoneNames: names}, err
+	}
+	metadata, err := formats.ReadClipBindingPose(source, wanted)
+	if err != nil {
+		return Clip{}, err
+	}
+	return Clip{Path: &path, BoneNames: metadata.BoneNames, FirstPose: &metadata.FirstPose}, nil
 }
 
 // Result is {clips: [...]} in request order.
@@ -181,6 +203,25 @@ type Result struct {
 // caller can submit batches asynchronously. Original path strings are
 // retained as UI keys while cache lookup normalizes filesystem identity.
 func (x *Index) Read(paths any) (*Result, error) {
+	return x.ReadWithPose(paths, nil)
+}
+
+func (x *Index) ReadWithPose(paths any, poseBones any) (*Result, error) {
+	var wanted map[string]bool
+	if poseBones != nil {
+		names, ok := poseBones.([]any)
+		if !ok || len(names) > 1024 {
+			return nil, valueError("Invalid frame-zero bone selection.")
+		}
+		wanted = make(map[string]bool, len(names))
+		for _, item := range names {
+			name, ok := item.(string)
+			if !ok || name == "" {
+				return nil, valueError("Invalid frame-zero bone selection.")
+			}
+			wanted[name] = true
+		}
+	}
 	var items []any
 	switch v := paths.(type) {
 	case []any:
@@ -199,25 +240,18 @@ func (x *Index) Read(paths any) (*Result, error) {
 	result := &Result{Clips: make([]Clip, 0, len(items))}
 	for _, item := range items {
 		path, isString := item.(string)
-		var names []string
-		var err error
-		if isString {
-			names, err = x.readOne(path)
-		} else {
-			err = errFullPath
-		}
-		if err == nil {
-			p := path
-			result.Clips = append(result.Clips, Clip{Path: &p, BoneNames: names})
+		if !isString {
+			result.Clips = append(result.Clips, Clip{Error: errFullPath.Error()})
 			continue
 		}
-		clip := Clip{Error: err.Error()}
+		clip, err := x.readClip(path, wanted)
+		if err == nil {
+			result.Clips = append(result.Clips, clip)
+			continue
+		}
+		clip = Clip{Path: &path, Error: err.Error()}
 		if clip.Error == "" {
 			clip.Error = "OSError"
-		}
-		if isString {
-			p := path
-			clip.Path = &p
 		}
 		result.Clips = append(result.Clips, clip)
 	}

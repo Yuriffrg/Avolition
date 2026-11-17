@@ -1,3 +1,51 @@
+# Avolition 0.8.35 and C4D Bridge 0.7.14
+
+The real saved Gameplay3P cinematic1 setup uses Widowmaker clip 00000000F36D at 60 FPS, frames 0 through 300. The original timing spline produced up to 0.03343 degrees of world-axis rotation error and 0.01588 cm of position drift across all 301 frames. Explicit linear timing reduced those maxima to 0.00000171 degrees and 0.00000313 cm. The exported file reopened successfully with one cinematic1 source and clip, 9 skins, and the original 60 FPS range. Original strict pose validation passed.
+
+Packaged Electron tested pointer-surface orbit and wheel dolly in the animated Widowmaker viewport, Browse models and Maps. Anchors stayed within 0.000001 pixel. The export tabs and setup state passed at 1060 x 700, 1440 x 900 and 1920 x 1080. Frame 17 survived workflow switching. The source export regression verified the removed Actor override and the automatic Motion System target request.
+
+All 520 Python tests and 29 Node test entries passed. Go vet and the affected API, C4D export, protocol, bridge and map-export packages passed. Tests used private profiles and detached native documents. Real Gameplay1P arms-only Idle and combined Reload reopened with one correctly named source/clip, the Joints hierarchy, preserved skin weights, zero scale keys, and both clavicles starting at local Y = 0.
+# Avolition 0.8.34 and C4D Bridge 0.7.13
+
+Packaged Electron loaded Widowmaker Gameplay3P Idle, retained frame 17 across workflows, and displayed Animation setup, the model selector and the Stager-first Export Manager at 1060 × 700, 1440 × 900 and 1920 × 1080. All three layouts fit horizontally. The Maps fixture loaded with its export controls visible and its object tree folded. Manual files, named setups, file settings and queue persistence were exercised with a private profile.
+
+A detached copy of Watchpoint Gibraltar reproduced a saved Actor registration with seven unresolved links. Native Cinema 4D 2026.4.0 recovered the existing Actor ID, five roles, five Motion Sources and the scene playhead. The nine prior POV sources and their linked clip survived. One Undo returned the scene to its previous state. A custom death input and renamed target survived save/reopen and re-import with zero added sources. A separate POV recovery reused all four source objects and preserved a changed Reload binding and a deliberately removed binding.
+
+The packaged app opened the repair review, submitted the five checked setups, and confirmed registration through its Go core and the packaged plugins. A Stager refresh in a private viewer recognized all five assignments. Holding W and recording produced a 34-frame, 24 FPS take. Send Take returned four editable Motion Clips with linked Idle/Forward sources and weight curves, while the document playhead stayed at frame 0.
+
+The 520 Avolition Python and 19 Node tests, the 248 Stager Python and 294 Node tests, Go vet, and the Go API, bridge, C4D export, map export and protocol tests passed. The full Windows Go suite reproduced existing oracle failures in analyze-library, exportbundle, exportpose, exporttextures, mapformats, materials, pycompat, textures and toolchain.
+
+# Avolition 0.8.33
+
+In packaged Electron, the real Widowmaker Gameplay3P Idle preview at a 1440 × 900 content size grew from 854 × 302 to 950 × 722 CSS pixels. At 1060 × 700 the same preview grew from 546 × 150 to 638 × 528. The 1920 × 1080 layout also passed without horizontal overflow. The library, playback controls and object hierarchy stayed visible with a clip assigned. Keyboard disclosures, filtering, viewport grid, setup assignments, adding a named setup to the queue and switching workflows were checked with a separate profile. The playhead remained at frame 17. The 518 Python tests and 19 Node test entries passed.
+
+# Avolition 0.8.32
+
+- On the real Widowmaker Overwatch Classic Gameplay3P rig, the library scanned 246 files and identified 241 unique clips. Hide unlikely matches hid 84 and displayed 157. All eight examples from the screenshot were hidden, including first-person 015D (8 of 190 body joints) and 8DAE (10 of its 92 tracks match). The previous collapsed pose 04A0 was also hidden. The tested body-authored partials 036B and 0FD0 and the saved Idle, Forward, Left, Right and Death were visible. The checkbox restores flagged clips and remembers the user's choice. Switching objects, scrubbing and filtering preserved the existing assignment and playhead.
+- One Load heroes action against the local Overwatch Steam install and DataTool v2.25.1.0+1153 produced 54 heroes. Selecting Widowmaker populated 154 skins. Overwatch Classic enabled Export. Switching to emotes showed 19 entries and switching to Tracer showed 152 skins. The checks only listed assets.
+- The release executable's nine Windows icon resources matched the new ICO. The renderer's logo image and icon were generated from the attached PNG.
+- All 518 Python tests and 19 Node test entries passed, as did Go vet and the Go API, clip binding, format and DataTool packages. The Windows Go Toolchain oracle's maximum-timestamp error-message test failed identically on the unchanged baseline. The 0.7.12 bridge and Stager code have no changes in this release.
+
+# Avolition 0.8.31 and C4D Bridge 0.7.12
+
+- The packaged Electron app scanned the real Widowmaker library using a separate profile. Hide near-origin poses started checked, hid collapsed clip 0000000004A0 and showed it when unchecked. All five named Actor setups stayed available. A separate sweep checked 160 distinct clips in the body model folder.
+- Export Manager inserted the five saved setups into a detached Cinema 4D 2026.4.0 document using the local bridge and Octane. The reopened rig held one Motion System and five linked 30 FPS sources with zero scale keys. Final frames were 150 for Idle, 24 for Forward, 21 each for Left and Right and 20 for Death. Native joint poses were compared on every source frame. The mix included the original 217-track Idle and 115-track Forward.
+- On refresh, Stager 0.16.0 resolved all five previews with all nine meshes enabled. The nine native skins held 27,932 points and each point's weights totaled one to within 2.22e-16. Stager recorded 26 frames of driving. Sending the take created editable Idle and Forward clips whose source links survived reopening. Re-import added zero sources. One Undo of a fresh insertion removed all five sources and the Actor registration and retained frame 3.
+- Real Widowmaker Gameplay1P arms-only Idle and combined Reload files reopened with the expected 92 joints, skin bindings, one named native source and clip, both clavicles starting at local Y zero and zero scale keys. The four-action POV library also reopened with the four assigned sources.
+- All 518 Python tests and all 19 Node test entries passed, as did the Go API, bridge, C4D export, clip binding, format, map export and protocol packages with Python oracles. The packaged desktop renderer was checked on Animations, Maps, Toolchain and Export Manager.
+
+# Avolition 0.8.30 and C4D Bridge 0.7.11
+
+Tested through the portable Electron UI and Go core with an isolated native Cinema 4D 2026.4.0 process, Octane, and Stager 0.16.0. Tests used a private catalog and mailbox. The interactive Cinema 4D process kept the original Watchpoint Gibraltar project open.
+
+- On a detached Watchpoint copy, the four selected Widowmaker setups produced one skinned Gameplay1P rig with one Motion System and four native Motion Sources. The actor and weapon tracks within each combined setup remained simultaneous. Both clavicles retained their frame-zero local Y of zero on each source. Native scale track count was zero. One ADS Down joint used Idle's static scale, and the bridge reported the joint in the import warnings.
+- Stager Refresh resolved one imported POV root and four previews in the existing project. W, right press, right release and R recorded a camera take. Sending frames 3 through 69 created four editable action clips and a hold. The native source links were inspected. A single Undo of the original insertion restored the previous Watchpoint assignments and source count at frame 3. Redo worked with Watchpoint's existing Motion Source library.
+- After sending a take, the test renamed the original Motion System owner and Reload source, assigned Reload to G, and saved/reopened the project. A second import reused the original rig, preserved the G assignment, and added zero sources. The review displayed the renamed target.
+- For the Actor check, the test explicitly assigned the ambiguous nickname `walk foward` to Forward and selected `bone_0001` as the root-motion object. The source was real Widowmaker Gameplay3P clip `000000000678`. Clip `000000008636`, a two-frame pose, exercised the Idle slot as a test choice. Native evaluation compared every source frame. After Refresh, W drove the Actor, a take recorded 26 frames at 30 FPS, and sending frames 3 through 28 produced 22 editable locomotion clips. All 22 links to the original Idle and forward sources survived save/reopen. One Undo of the initial Actor insertion removed the rig and its Stager registration. The tested project's playhead stayed at frame 3.
+- In Cinema 4D 2026.4.0, Redo after an import into a previously empty Motion Source library can put restored sources in the Object Manager. One Undo works. Using **Create Stager rig** again repairs the existing sources in place after the affected Redo. A separate check verified insertion into a meter-scale project.
+- Standalone real Widowmaker arms-only Idle and combined Reload exports were reopened and inspected. The existing file export retained the hierarchy, attachments, native frame ranges, source names, and clavicle offsets.
+- The changed Go packages (api, c4dbridge, c4dexport, mapexport and protocol) passed with Python oracles enabled. Eleven other full-suite oracle failures also reproduced on the pristine 0.8.29 checkout in this Windows environment.
+
 # Avolition 0.8.29 validation
 
 ## Gameplay1P clavicle height offsets (2026-10-25)

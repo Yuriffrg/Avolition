@@ -34,6 +34,17 @@ class ClipBindingTests(unittest.TestCase):
         self.assertEqual(metadata['path'], str(source))
         self.assertEqual(metadata['warnings'], [])
 
+    def test_selected_ancestors_sample_earliest_key_and_last_duplicate(self):
+        source = self.write('Pose.owanimclip', clip_bytes([
+            ('Head', [(0, [(12, (9, 9, 9)), (3, (1, 2, 3)), (3, (2, 1, 0))])]),
+            ('Neck', [(1, [(7, (0, 0, 0, 2))])]), ('Finger', [(0, [(0, (4, 5, 6))])])]))
+        row = ClipBindingIndex().read([str(source)], ['Head', 'Neck'])['clips'][0]
+        self.assertEqual(row['boneNames'], ['Head', 'Neck', 'Finger'])
+        self.assertEqual(row['firstPose'], [
+            {'name': 'Head', 'positions': {'frames': [3], 'values': [2, 1, 0]}},
+            {'name': 'Neck', 'rotations': {'frames': [7], 'values': [0, 0, 0, 1]}}])
+        self.assertNotIn('firstPose', ClipBindingIndex().read([str(source)])['clips'][0])
+
     def test_successful_empty_clip_is_not_a_parse_error(self):
         source = self.write('Empty.owanimclip', clip_bytes([], duration=1))
         self.assertEqual(read_clip_binding_metadata(source)['boneNames'], [])

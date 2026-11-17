@@ -311,7 +311,7 @@ func TestOldDefaultSortMigratesOnceAndNewChoiceSurvives(t *testing.T) {
 	encoded, _ := json.Marshal(catalog)
 	writeFile(t, path, encoded)
 	migrated := newAPI(t, Options{DataDir: f.profile})
-	assertJSON(t, ok(t, call(t, migrated, "library_settings")), map[string]any{"sort": "object-match", "hideDuplicates": false})
+	assertJSON(t, ok(t, call(t, migrated, "library_settings")), map[string]any{"sort": "object-match", "hideDuplicates": false, "hideOriginPoses": true})
 	saved := readJSON(t, path)
 	if saved["librarySortRevision"] != float64(1) {
 		t.Fatal(saved["librarySortRevision"])

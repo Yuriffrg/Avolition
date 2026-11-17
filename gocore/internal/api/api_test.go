@@ -299,6 +299,8 @@ func TestBindingAPIReturnsRealNamesAndUnknownErrorsInRequestOrder(t *testing.T) 
 	requested := []any{source, filepath.Join(base, "missing.owanimclip"), "relative.owanimclip", nil}
 	clips := l(okMap(t, call(t, a, "read_clip_bindings", requested))["clips"])
 	assertJSON(t, clips[0], map[string]any{"path": source, "boneNames": []any{"joint.Custom 日本語", "bone_0075"}})
+	pose := l(okMap(t, call(t, a, "read_clip_bindings", []any{source}, []any{"bone_0075"}))["clips"])
+	assertJSON(t, m(pose[0])["firstPose"], []any{})
 	for i, item := range clips {
 		if i > 0 && (m(item)["boneNames"] != nil || m(item)["error"] == nil) {
 			t.Fatalf("clip %d: %v", i, item)
@@ -325,7 +327,7 @@ func TestInvalidBindingBatchIsWrappedAsAPIError(t *testing.T) {
 
 func TestFreshLibraryDefaultsAgreeAndDoNotWrite(t *testing.T) {
 	a, _, profile := libraryAPI(t)
-	expected := map[string]any{"sort": "object-match", "hideDuplicates": true}
+	expected := map[string]any{"sort": "object-match", "hideDuplicates": true, "hideOriginPoses": true}
 	assertJSON(t, ok(t, call(t, a, "library_settings")), expected)
 	assertJSON(t, okMap(t, call(t, a, "bootstrap"))["libraryOptions"], expected)
 	if exists(filepath.Join(profile, "catalog.json")) {
@@ -341,9 +343,9 @@ func TestLibraryPartialUpdatesPersistWithoutChangingOtherSettings(t *testing.T) 
 	ok(t, call(t, a, "workflow_settings", map[string]any{"activeTab": "toolchain"}))
 	original := readJSON(t, filepath.Join(profile, "catalog.json"))
 	assertJSON(t, ok(t, call(t, a, "library_settings", map[string]any{"sort": "tracks-desc"})),
-		map[string]any{"sort": "tracks-desc", "hideDuplicates": true})
-	second := ok(t, call(t, a, "library_settings", map[string]any{"hideDuplicates": false}))
-	assertJSON(t, second, map[string]any{"sort": "tracks-desc", "hideDuplicates": false})
+		map[string]any{"sort": "tracks-desc", "hideDuplicates": true, "hideOriginPoses": true})
+	second := ok(t, call(t, a, "library_settings", map[string]any{"hideDuplicates": false, "hideOriginPoses": false}))
+	assertJSON(t, second, map[string]any{"sort": "tracks-desc", "hideDuplicates": false, "hideOriginPoses": false})
 	saved := readJSON(t, filepath.Join(profile, "catalog.json"))
 	delete(saved, "libraryOptions")
 	assertJSON(t, saved, original)
@@ -356,7 +358,7 @@ func TestAllSupportedSortsAreAccepted(t *testing.T) {
 	a, _, _ := libraryAPI(t)
 	for _, sort := range librarySorts {
 		assertJSON(t, ok(t, call(t, a, "library_settings", map[string]any{"sort": sort})),
-			map[string]any{"sort": sort, "hideDuplicates": true})
+			map[string]any{"sort": sort, "hideDuplicates": true, "hideOriginPoses": true})
 	}
 }
 
@@ -368,7 +370,7 @@ func TestBadPreferenceValuesPreserveState(t *testing.T) {
 	for _, changes := range []any{[]any{}, "name", 42, map[string]any{"unknown": true}, map[string]any{"sort": "guess-action"},
 		map[string]any{"sort": nil}, map[string]any{"sort": []any{}}, map[string]any{"sort": map[string]any{}},
 		map[string]any{"hideDuplicates": 0}, map[string]any{"hideDuplicates": 1}, map[string]any{"hideDuplicates": "false"},
-		map[string]any{"hideDuplicates": nil}, map[string]any{"sort": "tracks-desc", "hideDuplicates": "true"}} {
+		map[string]any{"hideOriginPoses": 0}, map[string]any{"hideDuplicates": nil}, map[string]any{"sort": "tracks-desc", "hideDuplicates": "true"}} {
 		failed(t, call(t, a, "library_settings", changes))
 		assertJSON(t, ok(t, call(t, a, "library_settings")), expected)
 		if !bytes.Equal(readBytes(t, filepath.Join(profile, "catalog.json")), original) {
@@ -391,7 +393,7 @@ func TestMissingOrInvalidLegacyPreferencesUseDefaults(t *testing.T) {
 		encoded, _ := json.Marshal(catalog)
 		path := writeFile(t, filepath.Join(profile, "catalog.json"), encoded)
 		a := newAPI(t, Options{DataDir: profile})
-		assertJSON(t, ok(t, call(t, a, "library_settings")), map[string]any{"sort": "object-match", "hideDuplicates": true})
+		assertJSON(t, ok(t, call(t, a, "library_settings")), map[string]any{"sort": "object-match", "hideDuplicates": true, "hideOriginPoses": true})
 		boot := okMap(t, call(t, a, "bootstrap"))
 		assertJSON(t, boot["catalog"], catalog["annotations"])
 		assertJSON(t, boot["outputFolder"], catalog["outputFolder"])

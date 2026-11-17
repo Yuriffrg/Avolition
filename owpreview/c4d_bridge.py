@@ -18,7 +18,7 @@ QUEUE_START_TIMEOUT = 150
 SETUP_MESSAGE = ('C4D export needs Cinema 4D with Octane and the included Avolition C4D Bridge. '
                  'Copy the Avolition C4D Bridge folder from this download into Cinema 4D\'s '
                  'plugins folder, restart Cinema 4D, then export again. Keep Cinema 4D open.')
-MAP_BRIDGE_MESSAGE = ('Install the bundled Avolition C4D Bridge 0.7.10, replacing the old bridge '
+MAP_BRIDGE_MESSAGE = ('Install the bundled Avolition C4D Bridge 0.7.14, replacing the old bridge '
                       'copy, then restart Cinema 4D with Octane. Keep only one bridge installed.')
 FEATURE_BRIDGE_MESSAGE = 'This export needs the updated motion clip and map timing support. ' + MAP_BRIDGE_MESSAGE
 
@@ -39,7 +39,17 @@ def write_json(path, value):
     path = Path(path)
     temporary = path.with_suffix('.tmp')
     temporary.write_text(json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(',', ':')), encoding='utf-8')
-    temporary.replace(path)
+    # Windows can deny replacement while the desktop reads the previous
+    # heartbeat. Keep publication atomic and allow the short-lived handle
+    # to close before retrying.
+    for attempt in range(6):
+        try:
+            temporary.replace(path)
+            return
+        except PermissionError as exc:
+            if getattr(exc, 'winerror', None) not in (5, 32) or attempt == 5:
+                raise
+            time.sleep(0.005 * (attempt + 1))
 
 
 def read_json(path, limit=MAX_PAYLOAD):

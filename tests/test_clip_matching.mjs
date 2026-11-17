@@ -135,4 +135,32 @@ same(compareMatchScores(timedScore(longWeapon),timedScore({...sameWeapon,path:'C
   true,'Source-folder evidence retains its established priority.');
 same(compareMatchScores(timedScore(longWeapon),timedScore({...sameWeapon,binding:undefined}))<0,
   true,'Unknown joint metadata does not outrank known matches because of timing.');
+
+// Gameplay3P uses the source model and exact joint overlap together. These
+// eight tracks are from the actual Widowmaker 015D first-person clip.
+const shoulders = ['bone_000D','bone_0032','bone_0031','bone_0035','bone_004E','bone_004D','bone_0050','bone_007D'];
+const legsAndTorso = ['bone_0003','bone_0055','bone_0059','bone_005F','bone_0063'];
+const skeleton = [...shoulders, ...legsAndTorso, ...bodyIds.slice(13)];
+const character = modelContext(model('011F',skeleton,{entityName:'Gameplay3P'}));
+const wrongArms = clip('015D',shoulders,'013E'), bodyOverlay = clip('036B',shoulders,'011F');
+const mismatch = (row, related=[]) => matchClip(row,character,related).mismatchReason;
+same(matchClip(wrongArms,character).matched,8);
+same(Boolean(mismatch(wrongArms)),true,'Matching all eight shoulder tracks cannot identify a foreign clip as a body action.');
+same(mismatch(bodyOverlay),'','A sparse clip from the body model stays visible.');
+same(mismatch({...wrongArms,path:'C:/Manual/Arms.owanimclip'}),'','Loose partial clips without conflicting evidence stay visible.');
+same(Boolean(mismatch(clip('poor loose fit',[...shoulders,...ids('absent',84)],null,{path:'C:/Manual/Unknown.owanimclip'}))),true);
+same(mismatch(clip('shared full body',[...shoulders,...legsAndTorso],'013E')),'','Sparse transfers can drive the torso and both legs on a different rig.');
+same(mismatch(clip('broad match',skeleton.slice(0,105),'013E')),'','Broadly compatible clips can come from another source model.');
+same(mismatch({...bodyOverlay, path:bodyOverlay.path.replace('/Classic/','/Alternate/')}),'','The same model GUID in another skin can supply sparse clips.');
+same(Boolean(mismatch(clip('no match',['unbound'],'011F'))),true);
+same(mismatch({...wrongArms,binding:undefined}),'','Unread binding metadata is never a measured mismatch.');
+same(matchClip(wrongArms,arms).mismatchReason,'','Gameplay1P browsing keeps its own semantics.');
+same(matchClip(wrongArms,gun).mismatchReason,'','Body filtering does not apply to attachments.');
+const hashedArms = {...wrongArms,duplicateKey:'sha256:001'};
+const hashedBody = {...bodyOverlay,duplicateKey:'sha256:001'};
+same(mismatch(hashedArms,indexOccurrences([hashedArms,hashedBody])),'','A verified body copy overrides the foreign display path.');
+same(Boolean(mismatch(hashedArms,indexOccurrences([hashedArms,{...hashedBody,duplicateError:'hash failed'}]))),true);
+same(compareMatchScores(matchClip(clip('usable loose clip',legsAndTorso,null,{path:'C:/Manual/Legs.owanimclip'}),character),matchClip(wrongArms,character))<0,true,'With filtering off, a plausible transfer sorts ahead of a foreign partial.');
+
+
 console.log(`Clip matching: ${checks} checks passed.`);

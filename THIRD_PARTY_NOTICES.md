@@ -4,7 +4,7 @@ Avolition application source is distributed under GPL-3.0-or-later. The full GPL
 
 ## Avolition brand artwork
 
-The user supplied `Avolition.tif` as the application's brand artwork. Its existing artwork was converted and resized to `web/assets/avolition-logo.png` and `web/assets/avolition.ico`; it was not redesigned. Version 0.8.11 displayed it in the header and empty preview. Version 0.8.12 removes those workspace logos and retains the Windows application icon. The supplied artwork is distinct from the third-party runtime components described below. The application was previously named Whitehound; the existing **Whitehound C4D Bridge** companion folder, title and protocol remain unchanged for compatibility.
+The user supplied `icon.png` as Avolition's brand artwork. Its Windows application icon and favicon use the sizes in `web/assets/avolition.ico`. A PNG copy is in `web/assets/avolition-logo.png`.
 
 ## Overwatch format and importer references
 

@@ -14,11 +14,11 @@ def stamp_windows_branding(target, source):
     from PyInstaller.utils.win32 import icon, versioninfo
     icon.CopyIcons_FromIco(str(target/'Avolition.exe'), [str(source/'web/assets/avolition.ico')])
     info = versioninfo.VSVersionInfo(
-        ffi=versioninfo.FixedFileInfo(filevers=(0, 8, 29, 0), prodvers=(0, 8, 29, 0), fileType=1),
+        ffi=versioninfo.FixedFileInfo(filevers=(0, 8, 35, 0), prodvers=(0, 8, 35, 0), fileType=1),
         kids=[versioninfo.StringFileInfo([versioninfo.StringTable('040904B0', [
             versioninfo.StringStruct(key, value) for key, value in {
-                'FileDescription': 'Avolition', 'FileVersion': '0.8.29', 'InternalName': 'Avolition',
-                'OriginalFilename': 'Avolition.exe', 'ProductName': 'Avolition', 'ProductVersion': '0.8.29'
+                'FileDescription': 'Avolition', 'FileVersion': '0.8.35', 'InternalName': 'Avolition',
+                'OriginalFilename': 'Avolition.exe', 'ProductName': 'Avolition', 'ProductVersion': '0.8.35'
             }.items()])]), versioninfo.VarFileInfo([versioninfo.VarStruct('Translation', [1033, 1200])])])
     versioninfo.write_version_info_to_executable(str(target/'Avolition.exe'), info)
 
@@ -96,7 +96,7 @@ def main():
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(item, destination)
     (target/'START HERE.txt').write_text(
-        'Avolition 0.8.29\n\nExtract this entire folder, then double-click Avolition.exe.\n'
+        'Avolition 0.8.35\n\nExtract this entire folder, then double-click Avolition.exe.\n'
         'Keep Avolition.exe beside its resources, locales, and runtime files.\n'
         'Avolition opens its own desktop window. Preview needs no browser, Python, Cinema 4D, or internet.\n'
         'Optional C4D/Octane export requires Cinema 4D and the included Cinema 4D/Avolition C4D Bridge plugin.\n\n'
@@ -117,18 +117,20 @@ def main():
         'Each clavicle starts at local Y zero by subtracting its first-frame height from every Y key, preserving its animated vertical movement.\n'
         'Animation projects retain source FPS, with exact whole-frame keys and clip boundaries at 30/60 FPS.\n'
         'Static maps use 24 FPS and project/preview ranges 0 to 1 frame, with current time at frame zero.\n'
-        'Find clips with For selected object, bone-coverage bars and joined search/sort controls.\n'
-        'Animation setup: choose the arms object and a clip, then the gun object and its clip. Both stay assigned.\n'
+        'Search for clips in the library. Open Filters to change the selected object, sort order or visibility.\n'
+        'In the Animation setup panel, choose the target for each clip. Choose the arms object and a clip, then the gun object and its clip. Both stay assigned.\n'
         'Enter an animation nickname and press Add to export. The file keeps entity_nickname; the Motion Source and clip use only your exact nickname.\n'
-        'Open the blue Export Manager button between Clip details and Preview objects, choose an output folder, check entries, then Export selected.\n'
+        'For individual C4D files, open Export Manager, select Cinema export, choose an output folder and click Export selected.\n'
+        'To use several setups in the active C4D project, open Export Manager, select setups on the Stager rig tab and click Create Stager rig.\n'
+        'Review the project, rig type and sources. Create the rig, then click Refresh scene in Stager.\n'
         'Entries start unchecked and include the whole entity, even with one assigned clip. C4D is the only export format.\n'
         'Maps: scan an exported map folder, expand maps and variant folders, then choose an .owmap scene.\n'
         'Map textures cover the scene at adaptive preview resolution. C4D baking uses source-resolution textures.\n'
         'Engine collision meshes are omitted using the Blender importer material list. Source geometry keeps its original scale.\n'
-        'Map C4D export requires the bundled Avolition C4D Bridge 0.7.10. Map lights, sounds and effects are not included.\n'
-        'Double-click scene, model or mesh names in Preview objects to rename them for future exports. Source files and joint names stay unchanged.\n'
+        'Map C4D export requires the bundled Avolition C4D Bridge 0.7.14. Map lights, sounds and effects are not included.\n'
+        'Double-click scene, model or mesh names under Scene objects to rename them for future exports. Source files and joint names stay unchanged.\n'
         'Example assets contains a small synthetic rig for trying the controls.\n', encoding='utf-8')
-    (target/'BUILD.json').write_text(json.dumps({'app': 'Avolition', 'version': '0.8.29',
+    (target/'BUILD.json').write_text(json.dumps({'app': 'Avolition', 'version': '0.8.35',
         'electron': version, 'electronSHA256': actual,
         **({'backend': 'go'} if args.go_core else {'python': sys.version})}, indent=2), encoding='utf-8')
     stamp_windows_branding(target, source)
